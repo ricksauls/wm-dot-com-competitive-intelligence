@@ -8,3 +8,10 @@ build/
 coverage/
 *.log
 .DS_Store
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+venv/
+*.egg-info/
