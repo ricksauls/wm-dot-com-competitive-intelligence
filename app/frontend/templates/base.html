@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Competitive Intelligence{% endblock %} · CI Dashboard</title>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <!-- Plotly -->
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+
+    <style>
+        /* ── DESIGN TOKENS ─────────────────────────────────────────── */
+        :root {
+            --ink:        #0F1923;   /* near-black, primary text */
+            --ink-2:      #3D4F5C;   /* secondary text */
+            --ink-3:      #7A909F;   /* muted/disabled */
+            --surface:    #F5F7F9;   /* page background */
+            --card:       #FFFFFF;   /* card/panel background */
+            --border:     #DDE3E8;   /* dividers, input borders */
+            --accent:     #0057FF;   /* primary action, links */
+            --accent-dim: #E6EEFF;   /* accent background tint */
+            --mine:       #0057FF;   /* "my brand" data color */
+            --comp-1:     #E8401C;   /* competitor 1 */
+            --comp-2:     #F5A623;   /* competitor 2 */
+            --comp-3:     #27AE60;   /* competitor 3 */
+            --other:      #C0CDD6;   /* "other" in SOS charts */
+            --success:    #27AE60;
+            --warning:    #F5A623;
+            --danger:     #E8401C;
+            --radius:     6px;
+            --radius-lg:  10px;
+            --shadow:     0 1px 3px rgba(15,25,35,.08), 0 1px 2px rgba(15,25,35,.06);
+            --shadow-md:  0 4px 12px rgba(15,25,35,.10);
+            --font-ui:    'Inter', 'SF Pro Display', system-ui, sans-serif;
+            --font-mono:  'JetBrains Mono', 'Fira Code', monospace;
+            --nav-width:  220px;
+        }
+
+        /* ── RESET ─────────────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { font-size: 15px; }
+        body {
+            font-family: var(--font-ui);
+            background: var(--surface);
+            color: var(--ink);
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
+        }
+
+        /* ── NAV ───────────────────────────────────────────────────── */
+        .nav {
+            width: var(--nav-width);
+            min-height: 100vh;
+            background: var(--ink);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            position: fixed;
+            top: 0; left: 0; bottom: 0;
+        }
+        .nav-logo {
+            padding: 20px 20px 16px;
+            border-bottom: 1px solid rgba(255,255,255,.08);
+        }
+        .nav-logo-mark {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: var(--accent);
+        }
+        .nav-logo-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: #fff;
+            margin-top: 2px;
+        }
+        .nav-section {
+            padding: 20px 12px 8px;
+        }
+        .nav-section-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            color: var(--ink-3);
+            padding: 0 8px;
+            margin-bottom: 4px;
+        }
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 8px 10px;
+            border-radius: var(--radius);
+            color: rgba(255,255,255,.65);
+            text-decoration: none;
+            font-size: 13.5px;
+            font-weight: 500;
+            transition: background .15s, color .15s;
+        }
+        .nav-link:hover { background: rgba(255,255,255,.07); color: #fff; }
+        .nav-link.active { background: var(--accent); color: #fff; }
+        .nav-link svg { flex-shrink: 0; opacity: .8; }
+        .nav-bottom {
+            margin-top: auto;
+            padding: 16px 12px;
+            border-top: 1px solid rgba(255,255,255,.08);
+        }
+        .nav-user {
+            font-size: 12px;
+            color: rgba(255,255,255,.45);
+            padding: 0 8px 8px;
+        }
+
+        /* ── MAIN ──────────────────────────────────────────────────── */
+        .main {
+            margin-left: var(--nav-width);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        .topbar {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            padding: 0 28px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .topbar-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--ink);
+        }
+        .topbar-actions { display: flex; gap: 10px; align-items: center; }
+        .content { padding: 28px; flex: 1; }
+
+        /* ── CARDS ─────────────────────────────────────────────────── */
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow);
+        }
+        .card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .card-title {
+            font-size: 13.5px;
+            font-weight: 600;
+            color: var(--ink);
+        }
+        .card-body { padding: 20px; }
+
+        /* ── BUTTONS ───────────────────────────────────────────────── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: var(--radius);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: background .15s, box-shadow .15s;
+            text-decoration: none;
+            line-height: 1;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: #0049d6; box-shadow: var(--shadow); }
+        .btn-secondary { background: var(--card); color: var(--ink); border-color: var(--border); }
+        .btn-secondary:hover { background: var(--surface); }
+        .btn-danger { background: #fff; color: var(--danger); border-color: var(--danger); }
+        .btn-danger:hover { background: #fff0ee; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+        /* ── TABLES ────────────────────────────────────────────────── */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+        thead th {
+            text-align: left;
+            padding: 10px 14px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            color: var(--ink-3);
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        tbody tr { border-bottom: 1px solid var(--border); }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: var(--surface); }
+        tbody td { padding: 11px 14px; color: var(--ink); vertical-align: middle; }
+
+        /* ── BADGES ────────────────────────────────────────────────── */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: .02em;
+        }
+        .badge-mine { background: var(--accent-dim); color: var(--accent); }
+        .badge-competitor { background: #FEF0ED; color: var(--comp-1); }
+        .badge-active { background: #E8F8EF; color: var(--success); }
+        .badge-inactive { background: var(--surface); color: var(--ink-3); }
+
+        /* ── FORMS ─────────────────────────────────────────────────── */
+        .form-group { margin-bottom: 16px; }
+        .form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--ink-2);
+            margin-bottom: 5px;
+        }
+        .form-control {
+            width: 100%;
+            padding: 8px 11px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 13.5px;
+            color: var(--ink);
+            background: var(--card);
+            transition: border-color .15s, box-shadow .15s;
+            font-family: var(--font-ui);
+        }
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-dim);
+        }
+        select.form-control { cursor: pointer; }
+
+        /* ── MODAL ─────────────────────────────────────────────────── */
+        .modal-backdrop {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(15,25,35,.45);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-backdrop.open { display: flex; }
+        .modal {
+            background: var(--card);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            width: 100%;
+            max-width: 480px;
+            margin: 16px;
+        }
+        .modal-header {
+            padding: 18px 20px 14px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .modal-title { font-size: 14px; font-weight: 600; }
+        .modal-close {
+            background: none; border: none; cursor: pointer;
+            color: var(--ink-3); font-size: 18px; line-height: 1;
+            padding: 2px 6px; border-radius: 4px;
+        }
+        .modal-close:hover { background: var(--surface); color: var(--ink); }
+        .modal-body { padding: 20px; }
+        .modal-footer {
+            padding: 14px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        /* ── ALERTS ────────────────────────────────────────────────── */
+        .alert {
+            padding: 10px 14px;
+            border-radius: var(--radius);
+            font-size: 13px;
+            margin-bottom: 16px;
+        }
+        .alert-success { background: #E8F8EF; color: #1a7a45; border: 1px solid #b6e8cc; }
+        .alert-danger  { background: #FEF0ED; color: #b83010; border: 1px solid #f5c0b0; }
+
+        /* ── UTILITIES ─────────────────────────────────────────────── */
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .gap-2 { gap: 8px; }
+        .gap-3 { gap: 12px; }
+        .mt-1 { margin-top: 4px; }
+        .mt-3 { margin-top: 12px; }
+        .mt-4 { margin-top: 16px; }
+        .text-muted { color: var(--ink-3); }
+        .text-sm { font-size: 12px; }
+        .text-mono { font-family: var(--font-mono); font-size: 12px; }
+        .empty-state {
+            text-align: center;
+            padding: 48px 20px;
+            color: var(--ink-3);
+        }
+        .empty-state p { margin-top: 6px; font-size: 13px; }
+
+        /* ── HTMX LOADING ──────────────────────────────────────────── */
+        .htmx-indicator { display: none; }
+        .htmx-request .htmx-indicator { display: inline-block; }
+    </style>
+
+    {% block head %}{% endblock %}
+</head>
+<body>
+
+<!-- ── SIDEBAR NAV ── -->
+<nav class="nav">
+    <div class="nav-logo">
+        <div class="nav-logo-mark">Walmart.com</div>
+        <div class="nav-logo-name">Competitive Intelligence</div>
+    </div>
+
+    <div class="nav-section">
+        <div class="nav-section-label">Reporting</div>
+        <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Dashboard
+        </a>
+    </div>
+
+    <div class="nav-section">
+        <div class="nav-section-label">Configuration</div>
+        <a href="/config/brands" class="nav-link {% if '/config/brands' in request.url.path %}active{% endif %}">
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 21h18M3 10h18M3 7l9-4 9 4M4 10v11M20 10v11M8 10v11M16 10v11M12 10v11"/></svg>
+            Brands
+        </a>
+        <a href="/config/products" class="nav-link {% if '/config/products' in request.url.path %}active{% endif %}">
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+            Products
+        </a>
+        <a href="/config/keywords" class="nav-link {% if '/config/keywords' in request.url.path %}active{% endif %}">
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            Keywords
+        </a>
+    </div>
+
+    <div class="nav-bottom">
+        <div class="nav-user">Signed in as {{ user }}</div>
+        <a href="/logout" class="nav-link">
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+            Sign out
+        </a>
+    </div>
+</nav>
+
+<!-- ── MAIN CONTENT ── -->
+<div class="main">
+    <div class="topbar">
+        <div class="topbar-title">{% block page_title %}{% endblock %}</div>
+        <div class="topbar-actions">{% block topbar_actions %}{% endblock %}</div>
+    </div>
+    <div class="content">
+        {% block content %}{% endblock %}
+    </div>
+</div>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>
