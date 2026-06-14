@@ -1,1 +1,211 @@
+{% extends "base.html" %}
 
+{% block title %}Keywords{% endblock %}
+{% block page_title %}Keywords{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm" onclick="openModal('add')">
+    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    Add Keyword
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">All Keywords</span>
+        <span class="text-muted text-sm" id="keyword-count"></span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Keyword</th>
+                    <th>Status</th>
+                    <th>Added</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="keywords-table-body">
+                <tr><td colspan="4"><div class="empty-state">Loading...</div></td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ADD / EDIT MODAL -->
+<div class="modal-backdrop" id="modal-backdrop">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title" id="modal-title">Add Keyword</span>
+            <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div id="form-alert"></div>
+            <div class="form-group">
+                <label class="form-label" for="keyword-text">Keyword</label>
+                <input class="form-control" type="text" id="keyword-text"
+                       placeholder="e.g. hot sauce">
+                <div class="text-muted text-sm mt-1">
+                    Enter the exact search term as a shopper would type it on Walmart.com.
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">
+                    <input type="checkbox" id="keyword-active" checked style="margin-right:6px;">
+                    Active (include in daily scraping)
+                </label>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" id="modal-save-btn" onclick="saveKeyword()">Save Keyword</button>
+        </div>
+    </div>
+</div>
+
+<!-- DELETE CONFIRM MODAL -->
+<div class="modal-backdrop" id="delete-backdrop">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">Delete Keyword</span>
+            <button class="modal-close" onclick="closeDeleteModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:13.5px;color:var(--ink-2);">
+                Delete keyword <strong id="delete-keyword-text"></strong>?
+                All historical scrape data for this keyword will be retained but no new data will be collected.
+            </p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+            <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let keywords = [];
+    let editingId = null;
+    let deletingId = null;
+
+    async function loadKeywords() {
+        const res = await fetch('/api/keywords/');
+        keywords = await res.json();
+        renderTable();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('keywords-table-body');
+        const active = keywords.filter(k => k.active).length;
+        document.getElementById('keyword-count').textContent =
+            `${keywords.length} total · ${active} active`;
+
+        if (!keywords.length) {
+            tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state">
+                <strong>No keywords yet</strong>
+                <p>Add the search terms you want to track on Walmart.com.</p>
+            </div></td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = keywords.map(k => `
+            <tr>
+                <td><strong>${esc(k.keyword)}</strong></td>
+                <td>${k.active
+                    ? '<span class="badge badge-active">Active</span>'
+                    : '<span class="badge badge-inactive">Inactive</span>'}</td>
+                <td class="text-muted text-sm">${formatDate(k.created_at)}</td>
+                <td style="text-align:right;">
+                    <button class="btn btn-secondary btn-sm" onclick="openModal('edit', ${k.id})">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="openDeleteModal(${k.id}, '${esc(k.keyword)}')">Delete</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function openModal(mode, id = null) {
+        editingId = id;
+        document.getElementById('form-alert').innerHTML = '';
+        document.getElementById('modal-title').textContent = mode === 'add' ? 'Add Keyword' : 'Edit Keyword';
+        document.getElementById('modal-save-btn').textContent = mode === 'add' ? 'Save Keyword' : 'Update Keyword';
+        if (mode === 'edit' && id) {
+            const k = keywords.find(x => x.id === id);
+            document.getElementById('keyword-text').value = k.keyword;
+            document.getElementById('keyword-active').checked = k.active;
+        } else {
+            document.getElementById('keyword-text').value = '';
+            document.getElementById('keyword-active').checked = true;
+        }
+        document.getElementById('modal-backdrop').classList.add('open');
+        setTimeout(() => document.getElementById('keyword-text').focus(), 50);
+    }
+
+    function closeModal() {
+        document.getElementById('modal-backdrop').classList.remove('open');
+        editingId = null;
+    }
+
+    async function saveKeyword() {
+        const keyword = document.getElementById('keyword-text').value.trim().toLowerCase();
+        const active = document.getElementById('keyword-active').checked;
+        if (!keyword) { showAlert('form-alert', 'Keyword is required.', 'danger'); return; }
+
+        const method = editingId ? 'PUT' : 'POST';
+        const url = editingId ? `/api/keywords/${editingId}` : '/api/keywords/';
+        const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keyword, active })
+        });
+        if (res.ok) {
+            closeModal();
+            loadKeywords();
+        } else {
+            const err = await res.json();
+            showAlert('form-alert', err.detail || 'Something went wrong.', 'danger');
+        }
+    }
+
+    function openDeleteModal(id, text) {
+        deletingId = id;
+        document.getElementById('delete-keyword-text').textContent = `"${text}"`;
+        document.getElementById('delete-backdrop').classList.add('open');
+    }
+
+    function closeDeleteModal() {
+        document.getElementById('delete-backdrop').classList.remove('open');
+        deletingId = null;
+    }
+
+    async function confirmDelete() {
+        const res = await fetch(`/api/keywords/${deletingId}`, { method: 'DELETE' });
+        closeDeleteModal();
+        if (res.ok) { loadKeywords(); }
+        else {
+            const err = await res.json();
+            alert(err.detail || 'Could not delete keyword.');
+        }
+    }
+
+    function showAlert(containerId, message, type) {
+        document.getElementById(containerId).innerHTML =
+            `<div class="alert alert-${type}">${message}</div>`;
+    }
+
+    function esc(str) {
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function formatDate(iso) {
+        return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    document.getElementById('modal-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+    document.getElementById('delete-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeDeleteModal(); });
+
+    loadKeywords();
+</script>
+{% endblock %}

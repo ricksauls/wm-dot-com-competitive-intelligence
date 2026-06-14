@@ -1,1 +1,217 @@
+{% extends "base.html" %}
 
+{% block title %}Brands{% endblock %}
+{% block page_title %}Brands{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm" onclick="openModal('add')">
+    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    Add Brand
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">All Brands</span>
+        <span class="text-muted text-sm" id="brand-count"></span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Brand Name</th>
+                    <th>Type</th>
+                    <th>Tracked for SOS</th>
+                    <th>Added</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="brands-table-body">
+                <tr><td colspan="5"><div class="empty-state">Loading...</div></td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ADD / EDIT MODAL -->
+<div class="modal-backdrop" id="modal-backdrop">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title" id="modal-title">Add Brand</span>
+            <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div id="form-alert"></div>
+            <div class="form-group">
+                <label class="form-label" for="brand-name">Brand Name</label>
+                <input class="form-control" type="text" id="brand-name" placeholder="e.g. Cholula">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="brand-type">Type</label>
+                <select class="form-control" id="brand-type">
+                    <option value="mine">Mine</option>
+                    <option value="competitor">Competitor</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="brand-tracked">
+                    <input type="checkbox" id="brand-tracked" checked style="margin-right:6px;">
+                    Track for Share of Search
+                </label>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" id="modal-save-btn" onclick="saveBrand()">Save Brand</button>
+        </div>
+    </div>
+</div>
+
+<!-- DELETE CONFIRM MODAL -->
+<div class="modal-backdrop" id="delete-backdrop">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">Delete Brand</span>
+            <button class="modal-close" onclick="closeDeleteModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:13.5px;color:var(--ink-2);">
+                Delete <strong id="delete-brand-name"></strong>? This cannot be undone.
+                Brands with associated products cannot be deleted.
+            </p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+            <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let brands = [];
+    let editingId = null;
+    let deletingId = null;
+
+    async function loadBrands() {
+        const res = await fetch('/api/brands/');
+        brands = await res.json();
+        renderTable();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('brands-table-body');
+        document.getElementById('brand-count').textContent = `${brands.length} brand${brands.length !== 1 ? 's' : ''}`;
+        if (!brands.length) {
+            tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">
+                <strong>No brands yet</strong>
+                <p>Add your brand and competitor brands to get started.</p>
+            </div></td></tr>`;
+            return;
+        }
+        tbody.innerHTML = brands.map(b => `
+            <tr>
+                <td><strong>${esc(b.name)}</strong></td>
+                <td><span class="badge ${b.type === 'mine' ? 'badge-mine' : 'badge-competitor'}">${b.type === 'mine' ? 'Mine' : 'Competitor'}</span></td>
+                <td>${b.tracked
+                    ? '<span class="badge badge-active">Yes</span>'
+                    : '<span class="badge badge-inactive">No</span>'}</td>
+                <td class="text-muted text-sm">${formatDate(b.created_at)}</td>
+                <td style="text-align:right;">
+                    <button class="btn btn-secondary btn-sm" onclick="openModal('edit', ${b.id})">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="openDeleteModal(${b.id}, '${esc(b.name)}')">Delete</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function openModal(mode, id = null) {
+        editingId = id;
+        document.getElementById('form-alert').innerHTML = '';
+        document.getElementById('modal-title').textContent = mode === 'add' ? 'Add Brand' : 'Edit Brand';
+        document.getElementById('modal-save-btn').textContent = mode === 'add' ? 'Save Brand' : 'Update Brand';
+        if (mode === 'edit' && id) {
+            const b = brands.find(x => x.id === id);
+            document.getElementById('brand-name').value = b.name;
+            document.getElementById('brand-type').value = b.type;
+            document.getElementById('brand-tracked').checked = b.tracked;
+        } else {
+            document.getElementById('brand-name').value = '';
+            document.getElementById('brand-type').value = 'mine';
+            document.getElementById('brand-tracked').checked = true;
+        }
+        document.getElementById('modal-backdrop').classList.add('open');
+        setTimeout(() => document.getElementById('brand-name').focus(), 50);
+    }
+
+    function closeModal() {
+        document.getElementById('modal-backdrop').classList.remove('open');
+        editingId = null;
+    }
+
+    async function saveBrand() {
+        const name = document.getElementById('brand-name').value.trim();
+        const type = document.getElementById('brand-type').value;
+        const tracked = document.getElementById('brand-tracked').checked;
+        if (!name) { showAlert('form-alert', 'Brand name is required.', 'danger'); return; }
+
+        const method = editingId ? 'PUT' : 'POST';
+        const url = editingId ? `/api/brands/${editingId}` : '/api/brands/';
+        const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, type, tracked })
+        });
+        if (res.ok) {
+            closeModal();
+            loadBrands();
+        } else {
+            const err = await res.json();
+            showAlert('form-alert', err.detail || 'Something went wrong.', 'danger');
+        }
+    }
+
+    function openDeleteModal(id, name) {
+        deletingId = id;
+        document.getElementById('delete-brand-name').textContent = name;
+        document.getElementById('delete-backdrop').classList.add('open');
+    }
+
+    function closeDeleteModal() {
+        document.getElementById('delete-backdrop').classList.remove('open');
+        deletingId = null;
+    }
+
+    async function confirmDelete() {
+        const res = await fetch(`/api/brands/${deletingId}`, { method: 'DELETE' });
+        closeDeleteModal();
+        if (res.ok) {
+            loadBrands();
+        } else {
+            const err = await res.json();
+            alert(err.detail || 'Could not delete brand.');
+        }
+    }
+
+    function showAlert(containerId, message, type) {
+        document.getElementById(containerId).innerHTML =
+            `<div class="alert alert-${type}">${message}</div>`;
+    }
+
+    function esc(str) {
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function formatDate(iso) {
+        return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    // Close modals on backdrop click
+    document.getElementById('modal-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+    document.getElementById('delete-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeDeleteModal(); });
+
+    loadBrands();
+</script>
+{% endblock %}

@@ -1,1 +1,69 @@
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In · CI Dashboard</title>
+    <style>
+        :root {
+            --ink:     #0F1923;
+            --ink-2:   #3D4F5C;
+            --surface: #F5F7F9;
+            --card:    #FFFFFF;
+            --border:  #DDE3E8;
+            --accent:  #0057FF;
+            --accent-dim: #E6EEFF;
+            --danger:  #E8401C;
+            --radius:  6px;
+            --font-ui: 'Inter', system-ui, sans-serif;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: var(--font-ui);
+            background: var(--ink);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-wrap { width: 100%; max-width: 380px; padding: 16px; }
+        .login-brand { text-align: center; margin-bottom: 28px; }
+        .login-brand-mark { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+        .login-brand-name { font-size: 18px; font-weight: 600; color: #fff; margin-top: 4px; }
+        .login-card { background: var(--card); border-radius: 10px; padding: 28px; box-shadow: 0 8px 32px rgba(0,0,0,.3); }
+        .login-heading { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 20px; }
+        .form-group { margin-bottom: 14px; }
+        .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 5px; }
+        .form-control { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; color: var(--ink); font-family: var(--font-ui); transition: border-color .15s, box-shadow .15s; }
+        .form-control:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+        .btn-login { width: 100%; padding: 10px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px; font-family: var(--font-ui); transition: background .15s; }
+        .btn-login:hover { background: #0049d6; }
+        .alert-danger { background: #FEF0ED; color: #b83010; border: 1px solid #f5c0b0; border-radius: var(--radius); padding: 9px 12px; font-size: 13px; margin-bottom: 16px; }
+    </style>
+</head>
+<body>
+    <div class="login-wrap">
+        <div class="login-brand">
+            <div class="login-brand-mark">Walmart.com</div>
+            <div class="login-brand-name">Competitive Intelligence</div>
+        </div>
+        <div class="login-card">
+            <div class="login-heading">Sign in to your account</div>
+            {% if error %}
+            <div class="alert-danger">{{ error }}</div>
+            {% endif %}
+            <form method="POST" action="/login">
+                <div class="form-group">
+                    <label class="form-label" for="username">Username</label>
+                    <input class="form-control" type="text" id="username" name="username" autocomplete="username" autofocus required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <input class="form-control" type="password" id="password" name="password" autocomplete="current-password" required>
+                </div>
+                <button class="btn-login" type="submit">Sign in</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

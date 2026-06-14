@@ -1,1 +1,189 @@
+{% extends "base.html" %}
 
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block topbar_actions %}
+<select class="form-control" id="period-select" style="width:auto;" onchange="setPeriod(this.value)">
+    <option value="wow">Week over Week</option>
+    <option value="mom">Month over Month</option>
+    <option value="qoq">Quarter over Quarter</option>
+    <option value="yoy">Year over Year</option>
+</select>
+{% endblock %}
+
+{% block content %}
+
+<!-- SUMMARY STAT CARDS -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;" id="stat-cards">
+    <div class="card">
+        <div class="card-body">
+            <div class="text-muted text-sm">Brands Tracked</div>
+            <div style="font-size:28px;font-weight:700;color:var(--ink);margin-top:4px;" id="stat-brands">—</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body">
+            <div class="text-muted text-sm">Products Tracked</div>
+            <div style="font-size:28px;font-weight:700;color:var(--ink);margin-top:4px;" id="stat-products">—</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body">
+            <div class="text-muted text-sm">Keywords Active</div>
+            <div style="font-size:28px;font-weight:700;color:var(--ink);margin-top:4px;" id="stat-keywords">—</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body">
+            <div class="text-muted text-sm">Last Daily Scrape</div>
+            <div style="font-size:14px;font-weight:600;color:var(--ink);margin-top:6px;" id="stat-last-daily">—</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body">
+            <div class="text-muted text-sm">Last Weekly Scrape</div>
+            <div style="font-size:14px;font-weight:600;color:var(--ink);margin-top:6px;" id="stat-last-weekly">—</div>
+        </div>
+    </div>
+</div>
+
+<!-- CHART PLACEHOLDERS — will be built out once scrapers are running -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Search Rank — My Products</span>
+            <select class="form-control" style="width:auto;font-size:12px;" id="rank-keyword-select">
+                <option value="">Select keyword</option>
+            </select>
+        </div>
+        <div class="card-body">
+            <div id="chart-search-rank" style="height:260px;"></div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Share of Search — Page 1</span>
+            <select class="form-control" style="width:auto;font-size:12px;" id="sos-keyword-select">
+                <option value="">Select keyword</option>
+            </select>
+        </div>
+        <div class="card-body">
+            <div id="chart-sos" style="height:260px;"></div>
+        </div>
+    </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Pricing Trends</span>
+        </div>
+        <div class="card-body">
+            <div id="chart-pricing" style="height:260px;"></div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Reviews & Ratings</span>
+        </div>
+        <div class="card-body">
+            <div id="chart-reviews" style="height:260px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ALERTS — new SKUs + content changes -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">New SKU Alerts</span>
+        </div>
+        <div class="card-body">
+            <div id="new-sku-list">
+                <div class="empty-state">
+                    <strong>No new SKUs detected</strong>
+                    <p>New competitor SKUs appearing on page 1 will show here.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Content Changes</span>
+        </div>
+        <div class="card-body">
+            <div id="content-changes-list">
+                <div class="empty-state">
+                    <strong>No content changes detected</strong>
+                    <p>Competitor listing changes will appear here after the first weekly scrape.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentPeriod = 'wow';
+
+    function setPeriod(val) {
+        currentPeriod = val;
+        loadDashboard();
+    }
+
+    async function loadSummaryStats() {
+        const [brands, products, keywords] = await Promise.all([
+            fetch('/api/brands/').then(r => r.json()),
+            fetch('/api/products/').then(r => r.json()),
+            fetch('/api/keywords/').then(r => r.json()),
+        ]);
+        document.getElementById('stat-brands').textContent = brands.length;
+        document.getElementById('stat-products').textContent = products.length;
+        document.getElementById('stat-keywords').textContent = keywords.filter(k => k.active).length;
+
+        // Populate keyword selects
+        const activeKeywords = keywords.filter(k => k.active);
+        ['rank-keyword-select', 'sos-keyword-select'].forEach(id => {
+            const sel = document.getElementById(id);
+            sel.innerHTML = '<option value="">Select keyword</option>' +
+                activeKeywords.map(k => `<option value="${k.id}">${k.keyword}</option>`).join('');
+        });
+    }
+
+    function renderEmptyChart(containerId, message) {
+        const layout = {
+            annotations: [{
+                text: message,
+                xref: 'paper', yref: 'paper',
+                x: 0.5, y: 0.5,
+                showarrow: false,
+                font: { size: 13, color: '#7A909F' }
+            }],
+            xaxis: { visible: false },
+            yaxis: { visible: false },
+            margin: { t: 10, b: 10, l: 10, r: 10 },
+            paper_bgcolor: 'transparent',
+            plot_bgcolor: 'transparent',
+        };
+        Plotly.newPlot(containerId, [], layout, { displayModeBar: false, responsive: true });
+    }
+
+    function loadDashboard() {
+        // Charts will be populated once scrapers are running and data API endpoints exist.
+        // For now render empty states with informative messages.
+        renderEmptyChart('chart-search-rank', 'Select a keyword and run the daily scraper to see rank trends.');
+        renderEmptyChart('chart-sos', 'Select a keyword to see Share of Search breakdown.');
+        renderEmptyChart('chart-pricing', 'Pricing data will appear after the first weekly scrape.');
+        renderEmptyChart('chart-reviews', 'Review trend data will appear after the first weekly scrape.');
+
+        document.getElementById('stat-last-daily').textContent = 'Not yet run';
+        document.getElementById('stat-last-weekly').textContent = 'Not yet run';
+    }
+
+    loadSummaryStats();
+    loadDashboard();
+</script>
+{% endblock %}

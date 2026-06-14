@@ -1,1 +1,279 @@
+{% extends "base.html" %}
 
+{% block title %}Products{% endblock %}
+{% block page_title %}Products{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm" onclick="openModal('add')">
+    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    Add Product
+</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- FILTER BAR -->
+<div class="flex items-center gap-3" style="margin-bottom:16px;">
+    <select class="form-control" id="filter-brand" style="width:auto;min-width:160px;" onchange="renderTable()">
+        <option value="">All Brands</option>
+    </select>
+    <select class="form-control" id="filter-type" style="width:auto;" onchange="renderTable()">
+        <option value="">All Types</option>
+        <option value="mine">Mine</option>
+        <option value="competitor">Competitor</option>
+    </select>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">All Products</span>
+        <span class="text-muted text-sm" id="product-count"></span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Product Name</th>
+                    <th>Brand</th>
+                    <th>Type</th>
+                    <th>Item ID</th>
+                    <th>Walmart URL</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="products-table-body">
+                <tr><td colspan="7"><div class="empty-state">Loading...</div></td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ADD / EDIT MODAL -->
+<div class="modal-backdrop" id="modal-backdrop">
+    <div class="modal" style="max-width:520px;">
+        <div class="modal-header">
+            <span class="modal-title" id="modal-title">Add Product</span>
+            <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div id="form-alert"></div>
+            <div class="form-group">
+                <label class="form-label" for="product-name">Product Name</label>
+                <input class="form-control" type="text" id="product-name" placeholder="e.g. Original Hot Sauce 5oz">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="product-brand">Brand</label>
+                <select class="form-control" id="product-brand"></select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="product-item-id">Walmart Item ID</label>
+                <input class="form-control" type="text" id="product-item-id" placeholder="e.g. 123456789" class="text-mono">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="product-url">Walmart URL</label>
+                <input class="form-control" type="url" id="product-url" placeholder="https://www.walmart.com/ip/...">
+            </div>
+            <div class="form-group">
+                <label class="form-label">
+                    <input type="checkbox" id="product-active" checked style="margin-right:6px;">
+                    Active (include in scraping)
+                </label>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" id="modal-save-btn" onclick="saveProduct()">Save Product</button>
+        </div>
+    </div>
+</div>
+
+<!-- DELETE CONFIRM MODAL -->
+<div class="modal-backdrop" id="delete-backdrop">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">Delete Product</span>
+            <button class="modal-close" onclick="closeDeleteModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:13.5px;color:var(--ink-2);">
+                Delete <strong id="delete-product-name"></strong>? This cannot be undone.
+            </p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+            <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let products = [];
+    let brands = [];
+    let editingId = null;
+    let deletingId = null;
+
+    async function loadData() {
+        const [pRes, bRes] = await Promise.all([
+            fetch('/api/products/'),
+            fetch('/api/brands/')
+        ]);
+        products = await pRes.json();
+        brands = await bRes.json();
+        populateBrandFilter();
+        renderTable();
+    }
+
+    function populateBrandFilter() {
+        const sel = document.getElementById('filter-brand');
+        const current = sel.value;
+        sel.innerHTML = '<option value="">All Brands</option>' +
+            brands.map(b => `<option value="${b.id}">${esc(b.name)}</option>`).join('');
+        sel.value = current;
+    }
+
+    function renderTable() {
+        const filterBrand = document.getElementById('filter-brand').value;
+        const filterType = document.getElementById('filter-type').value;
+
+        let filtered = products.filter(p => {
+            if (filterBrand && String(p.brand_id) !== filterBrand) return false;
+            if (filterType && p.brand.type !== filterType) return false;
+            return true;
+        });
+
+        document.getElementById('product-count').textContent =
+            `${filtered.length} product${filtered.length !== 1 ? 's' : ''}`;
+
+        const tbody = document.getElementById('products-table-body');
+        if (!filtered.length) {
+            tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">
+                <strong>No products found</strong>
+                <p>Add products or adjust your filters.</p>
+            </div></td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = filtered.map(p => `
+            <tr>
+                <td><strong>${esc(p.name)}</strong></td>
+                <td>${esc(p.brand.name)}</td>
+                <td><span class="badge ${p.brand.type === 'mine' ? 'badge-mine' : 'badge-competitor'}">${p.brand.type === 'mine' ? 'Mine' : 'Competitor'}</span></td>
+                <td class="text-mono">${esc(p.walmart_item_id)}</td>
+                <td>
+                    <a href="${esc(p.walmart_url)}" target="_blank" rel="noopener"
+                       style="color:var(--accent);font-size:12px;text-decoration:none;"
+                       title="${esc(p.walmart_url)}">
+                        walmart.com ↗
+                    </a>
+                </td>
+                <td>${p.active
+                    ? '<span class="badge badge-active">Active</span>'
+                    : '<span class="badge badge-inactive">Inactive</span>'}</td>
+                <td style="text-align:right;">
+                    <button class="btn btn-secondary btn-sm" onclick="openModal('edit', ${p.id})">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="openDeleteModal(${p.id}, '${esc(p.name)}')">Delete</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function openModal(mode, id = null) {
+        editingId = id;
+        document.getElementById('form-alert').innerHTML = '';
+        document.getElementById('modal-title').textContent = mode === 'add' ? 'Add Product' : 'Edit Product';
+        document.getElementById('modal-save-btn').textContent = mode === 'add' ? 'Save Product' : 'Update Product';
+
+        // Populate brand dropdown
+        const brandSel = document.getElementById('product-brand');
+        brandSel.innerHTML = brands.map(b =>
+            `<option value="${b.id}">${esc(b.name)} (${b.type === 'mine' ? 'Mine' : 'Competitor'})</option>`
+        ).join('');
+
+        if (mode === 'edit' && id) {
+            const p = products.find(x => x.id === id);
+            document.getElementById('product-name').value = p.name;
+            document.getElementById('product-brand').value = p.brand_id;
+            document.getElementById('product-item-id').value = p.walmart_item_id;
+            document.getElementById('product-url').value = p.walmart_url;
+            document.getElementById('product-active').checked = p.active;
+        } else {
+            document.getElementById('product-name').value = '';
+            document.getElementById('product-item-id').value = '';
+            document.getElementById('product-url').value = '';
+            document.getElementById('product-active').checked = true;
+        }
+        document.getElementById('modal-backdrop').classList.add('open');
+        setTimeout(() => document.getElementById('product-name').focus(), 50);
+    }
+
+    function closeModal() {
+        document.getElementById('modal-backdrop').classList.remove('open');
+        editingId = null;
+    }
+
+    async function saveProduct() {
+        const name = document.getElementById('product-name').value.trim();
+        const brand_id = parseInt(document.getElementById('product-brand').value);
+        const walmart_item_id = document.getElementById('product-item-id').value.trim();
+        const walmart_url = document.getElementById('product-url').value.trim();
+        const active = document.getElementById('product-active').checked;
+
+        if (!name) { showAlert('form-alert', 'Product name is required.', 'danger'); return; }
+        if (!walmart_item_id) { showAlert('form-alert', 'Walmart Item ID is required.', 'danger'); return; }
+        if (!walmart_url) { showAlert('form-alert', 'Walmart URL is required.', 'danger'); return; }
+
+        const method = editingId ? 'PUT' : 'POST';
+        const url = editingId ? `/api/products/${editingId}` : '/api/products/';
+        const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, brand_id, walmart_item_id, walmart_url, active })
+        });
+        if (res.ok) {
+            closeModal();
+            loadData();
+        } else {
+            const err = await res.json();
+            showAlert('form-alert', err.detail || 'Something went wrong.', 'danger');
+        }
+    }
+
+    function openDeleteModal(id, name) {
+        deletingId = id;
+        document.getElementById('delete-product-name').textContent = name;
+        document.getElementById('delete-backdrop').classList.add('open');
+    }
+
+    function closeDeleteModal() {
+        document.getElementById('delete-backdrop').classList.remove('open');
+        deletingId = null;
+    }
+
+    async function confirmDelete() {
+        const res = await fetch(`/api/products/${deletingId}`, { method: 'DELETE' });
+        closeDeleteModal();
+        if (res.ok) { loadData(); }
+        else {
+            const err = await res.json();
+            alert(err.detail || 'Could not delete product.');
+        }
+    }
+
+    function showAlert(containerId, message, type) {
+        document.getElementById(containerId).innerHTML =
+            `<div class="alert alert-${type}">${message}</div>`;
+    }
+
+    function esc(str) {
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    document.getElementById('modal-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+    document.getElementById('delete-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeDeleteModal(); });
+
+    loadData();
+</script>
+{% endblock %}
