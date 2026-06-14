@@ -1,1 +1,40 @@
+name: Deploy
 
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to droplet
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            set -e
+
+            APP_DIR="/home/deploy/apps/wm-competitive-intel"
+
+            echo "── Pulling latest code ──"
+            cd $APP_DIR
+            git pull origin main
+
+            echo "── Installing dependencies ──"
+            source venv/bin/activate
+            pip install -r requirements.txt --quiet
+
+            echo "── Running migrations ──"
+            alembic upgrade head
+
+            echo "── Restarting app ──"
+            sudo systemctl restart wm-competitive-intel
+
+            echo "── Done ──"
