@@ -1,0 +1,20 @@
+# Web framework
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+python-multipart==0.0.9       # form parsing for login
+jinja2==3.1.4
+itsdangerous==2.2.0           # session signing (used by starlette SessionMiddleware)
+
+# Database
+sqlalchemy==2.0.30
+alembic==1.13.1
+psycopg2-binary==2.9.9        # Postgres driver
+
+# Config
+pydantic-settings==2.2.1
+
+# Scraping
+playwright==1.44.0
+
+# Utilities
+python-dotenv==1.0.1
