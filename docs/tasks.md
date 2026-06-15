@@ -5,3 +5,4 @@
 - [ ] Add .gitkeep to static/css/ and static/js/
 - [ ] Verify daily cron ran at 9am CDT
 - [ ] Test weekly scraper bot block fix
+- [ ] Add ability to add multiple brands, products and keywords via a csv file
