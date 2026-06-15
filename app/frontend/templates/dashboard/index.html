@@ -4,9 +4,12 @@
 {% block page_title %}Dashboard{% endblock %}
 
 {% block topbar_actions %}
+<select class="form-control" id="group-select" style="width:auto;min-width:200px;" onchange="setGroup(this.value)">
+    <option value="">Loading groups...</option>
+</select>
 <select class="form-control" id="period-select" style="width:auto;" onchange="setPeriod(this.value)">
     <option value="wow">Week over Week</option>
-    <option value="mom">Month over Month</option>
+    <option value="mom" selected>Month over Month</option>
     <option value="qoq">Quarter over Quarter</option>
     <option value="yoy">Year over Year</option>
 </select>
@@ -14,12 +17,32 @@
 
 {% block content %}
 
-<!-- SUMMARY STAT CARDS -->
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;" id="stat-cards">
+<!-- STAT CARDS -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px;">
     <div class="card">
         <div class="card-body">
-            <div class="text-muted text-sm">Brands Tracked</div>
-            <div style="font-size:28px;font-weight:700;color:var(--ink);margin-top:4px;" id="stat-brands">—</div>
+            <div class="text-muted text-sm">Avg Search Rank</div>
+            <div style="font-size:28px;font-weight:700;color:var(--ink);margin-top:4px;" id="stat-rank">—</div>
+            <div class="text-sm mt-1" id="stat-rank-delta" style="color:var(--ink-3);"></div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body">
+            <div class="text-muted text-sm">Share of Search</div>
+            <div style="font-size:28px;font-weight:700;color:var(--ink);margin-top:4px;" id="stat-sos">—</div>
+            <div class="text-sm mt-1" id="stat-sos-delta" style="color:var(--ink-3);"></div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body">
+            <div class="text-muted text-sm">Content Changes</div>
+            <div style="font-size:28px;font-weight:700;color:var(--ink);margin-top:4px;" id="stat-content">—</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body">
+            <div class="text-muted text-sm">New SKUs Detected</div>
+            <div style="font-size:28px;font-weight:700;color:var(--ink);margin-top:4px;" id="stat-skus">—</div>
         </div>
     </div>
     <div class="card">
@@ -30,94 +53,82 @@
     </div>
     <div class="card">
         <div class="card-body">
-            <div class="text-muted text-sm">Keywords Active</div>
+            <div class="text-muted text-sm">Keywords Tracked</div>
             <div style="font-size:28px;font-weight:700;color:var(--ink);margin-top:4px;" id="stat-keywords">—</div>
-        </div>
-    </div>
-    <div class="card">
-        <div class="card-body">
-            <div class="text-muted text-sm">Last Daily Scrape</div>
-            <div style="font-size:14px;font-weight:600;color:var(--ink);margin-top:6px;" id="stat-last-daily">—</div>
-        </div>
-    </div>
-    <div class="card">
-        <div class="card-body">
-            <div class="text-muted text-sm">Last Weekly Scrape</div>
-            <div style="font-size:14px;font-weight:600;color:var(--ink);margin-top:6px;" id="stat-last-weekly">—</div>
         </div>
     </div>
 </div>
 
-<!-- CHART PLACEHOLDERS — will be built out once scrapers are running -->
+<!-- SEARCH RANK + SHARE OF SEARCH -->
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
     <div class="card">
         <div class="card-header">
-            <span class="card-title">Search Rank — My Products</span>
-            <select class="form-control" style="width:auto;font-size:12px;" id="rank-keyword-select">
+            <span class="card-title">Search Rank</span>
+            <select class="form-control" style="width:auto;font-size:12px;" id="rank-keyword-select" onchange="loadSearchRank()">
                 <option value="">Select keyword</option>
             </select>
         </div>
-        <div class="card-body">
+        <div class="card-body" style="padding:12px;">
             <div id="chart-search-rank" style="height:260px;"></div>
         </div>
     </div>
     <div class="card">
         <div class="card-header">
             <span class="card-title">Share of Search — Page 1</span>
-            <select class="form-control" style="width:auto;font-size:12px;" id="sos-keyword-select">
+            <select class="form-control" style="width:auto;font-size:12px;" id="sos-keyword-select" onchange="loadSOS()">
                 <option value="">Select keyword</option>
             </select>
         </div>
-        <div class="card-body">
+        <div class="card-body" style="padding:12px;">
             <div id="chart-sos" style="height:260px;"></div>
         </div>
     </div>
 </div>
 
+<!-- PRICING + REVIEWS -->
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
     <div class="card">
         <div class="card-header">
             <span class="card-title">Pricing Trends</span>
         </div>
-        <div class="card-body">
+        <div class="card-body" style="padding:12px;">
             <div id="chart-pricing" style="height:260px;"></div>
         </div>
     </div>
     <div class="card">
         <div class="card-header">
             <span class="card-title">Reviews & Ratings</span>
+            <select class="form-control" style="width:auto;font-size:12px;" id="reviews-product-select" onchange="loadReviews()">
+                <option value="">Select product</option>
+            </select>
         </div>
-        <div class="card-body">
+        <div class="card-body" style="padding:12px;">
             <div id="chart-reviews" style="height:260px;"></div>
         </div>
     </div>
 </div>
 
-<!-- ALERTS — new SKUs + content changes -->
+<!-- CONTENT CHANGES + NEW SKUs -->
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
     <div class="card">
         <div class="card-header">
-            <span class="card-title">New SKU Alerts</span>
+            <span class="card-title">Content Changes</span>
+            <span class="text-muted text-sm" id="content-count"></span>
         </div>
-        <div class="card-body">
-            <div id="new-sku-list">
-                <div class="empty-state">
-                    <strong>No new SKUs detected</strong>
-                    <p>New competitor SKUs appearing on page 1 will show here.</p>
-                </div>
+        <div class="card-body" style="padding:0;">
+            <div id="content-changes-list" style="max-height:300px;overflow-y:auto;">
+                <div class="empty-state"><strong>No content changes</strong><p>Changes will appear after the first weekly scrape.</p></div>
             </div>
         </div>
     </div>
     <div class="card">
         <div class="card-header">
-            <span class="card-title">Content Changes</span>
+            <span class="card-title">New SKU Alerts</span>
+            <span class="text-muted text-sm" id="sku-count"></span>
         </div>
-        <div class="card-body">
-            <div id="content-changes-list">
-                <div class="empty-state">
-                    <strong>No content changes detected</strong>
-                    <p>Competitor listing changes will appear here after the first weekly scrape.</p>
-                </div>
+        <div class="card-body" style="padding:0;">
+            <div id="new-sku-list" style="max-height:300px;overflow-y:auto;">
+                <div class="empty-state"><strong>No new SKUs detected</strong><p>New competitor SKUs appearing on page 1 will show here.</p></div>
             </div>
         </div>
     </div>
@@ -127,63 +138,356 @@
 
 {% block scripts %}
 <script>
-    let currentPeriod = 'wow';
+    // ── State ──────────────────────────────────────────────────────────────
+    let currentGroupId = null;
+    let currentPeriod  = 'mom';
+    let groupKeywords  = [];
+    let groupProducts  = [];
+
+    // Brand colors — consistent across charts
+    const COLORS = ['#0057FF','#E8401C','#F5A623','#27AE60','#9B59B6','#1ABC9C','#C0CDD6'];
+    let brandColorMap = {};
+    function getBrandColor(brandName) {
+        if (!brandColorMap[brandName]) {
+            const idx = Object.keys(brandColorMap).length % COLORS.length;
+            brandColorMap[brandName] = COLORS[idx];
+        }
+        return brandColorMap[brandName];
+    }
+
+    const PLOTLY_LAYOUT = {
+        margin: { t: 10, b: 40, l: 50, r: 20 },
+        paper_bgcolor: 'transparent',
+        plot_bgcolor:  'transparent',
+        font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#3D4F5C' },
+        legend: { orientation: 'h', y: -0.25, font: { size: 10 } },
+        xaxis: { gridcolor: '#DDE3E8', linecolor: '#DDE3E8' },
+        yaxis: { gridcolor: '#DDE3E8', linecolor: '#DDE3E8' },
+    };
+    const PLOTLY_CONFIG = { displayModeBar: false, responsive: true };
+
+    // ── Init ───────────────────────────────────────────────────────────────
+    async function init() {
+        const res = await fetch('/api/groups/');
+        const groups = await res.json();
+        const sel = document.getElementById('group-select');
+        if (!groups.length) {
+            sel.innerHTML = '<option value="">No groups configured</option>';
+            return;
+        }
+        sel.innerHTML = groups.map(g =>
+            `<option value="${g.id}">${esc(g.name)}</option>`
+        ).join('');
+        currentGroupId = groups[0].id;
+        sel.value = currentGroupId;
+        await loadGroupMembers();
+        loadDashboard();
+    }
+
+    async function loadGroupMembers() {
+        const res = await fetch(`/api/groups/`);
+        const groups = await res.json();
+        const group = groups.find(g => g.id === parseInt(currentGroupId));
+        if (!group) return;
+        groupKeywords = group.keywords || [];
+        groupProducts = group.products || [];
+
+        // Populate keyword selects
+        const kwOpts = '<option value="">Select keyword</option>' +
+            groupKeywords.map(k => `<option value="${k.id}">${esc(k.keyword)}</option>`).join('');
+        document.getElementById('rank-keyword-select').innerHTML = kwOpts;
+        document.getElementById('sos-keyword-select').innerHTML  = kwOpts;
+
+        // Populate product select for reviews
+        document.getElementById('reviews-product-select').innerHTML =
+            '<option value="">All products</option>' +
+            groupProducts.map(p => `<option value="${p.id}">${esc(p.name.substring(0,40))}</option>`).join('');
+    }
+
+    function setGroup(val) {
+        currentGroupId = val;
+        brandColorMap = {};
+        loadGroupMembers().then(() => loadDashboard());
+    }
 
     function setPeriod(val) {
         currentPeriod = val;
         loadDashboard();
     }
 
-    async function loadSummaryStats() {
-        const [brands, products, keywords] = await Promise.all([
-            fetch('/api/brands/').then(r => r.json()),
-            fetch('/api/products/').then(r => r.json()),
-            fetch('/api/keywords/').then(r => r.json()),
-        ]);
-        document.getElementById('stat-brands').textContent = brands.length;
-        document.getElementById('stat-products').textContent = products.length;
-        document.getElementById('stat-keywords').textContent = keywords.filter(k => k.active).length;
-
-        // Populate keyword selects
-        const activeKeywords = keywords.filter(k => k.active);
-        ['rank-keyword-select', 'sos-keyword-select'].forEach(id => {
-            const sel = document.getElementById(id);
-            sel.innerHTML = '<option value="">Select keyword</option>' +
-                activeKeywords.map(k => `<option value="${k.id}">${k.keyword}</option>`).join('');
-        });
-    }
-
-    function renderEmptyChart(containerId, message) {
-        const layout = {
-            annotations: [{
-                text: message,
-                xref: 'paper', yref: 'paper',
-                x: 0.5, y: 0.5,
-                showarrow: false,
-                font: { size: 13, color: '#7A909F' }
-            }],
-            xaxis: { visible: false },
-            yaxis: { visible: false },
-            margin: { t: 10, b: 10, l: 10, r: 10 },
-            paper_bgcolor: 'transparent',
-            plot_bgcolor: 'transparent',
-        };
-        Plotly.newPlot(containerId, [], layout, { displayModeBar: false, responsive: true });
-    }
-
+    // ── Load all charts ────────────────────────────────────────────────────
     function loadDashboard() {
-        // Charts will be populated once scrapers are running and data API endpoints exist.
-        // For now render empty states with informative messages.
-        renderEmptyChart('chart-search-rank', 'Select a keyword and run the daily scraper to see rank trends.');
-        renderEmptyChart('chart-sos', 'Select a keyword to see Share of Search breakdown.');
-        renderEmptyChart('chart-pricing', 'Pricing data will appear after the first weekly scrape.');
-        renderEmptyChart('chart-reviews', 'Review trend data will appear after the first weekly scrape.');
-
-        document.getElementById('stat-last-daily').textContent = 'Not yet run';
-        document.getElementById('stat-last-weekly').textContent = 'Not yet run';
+        if (!currentGroupId) return;
+        loadSummary();
+        loadPricing();
+        loadContentChanges();
+        loadNewSKUs();
+        // Charts with keyword selector default to first keyword
+        const firstKw = groupKeywords[0];
+        if (firstKw) {
+            document.getElementById('rank-keyword-select').value = firstKw.id;
+            document.getElementById('sos-keyword-select').value  = firstKw.id;
+            loadSearchRank();
+            loadSOS();
+        }
+        // Reviews default to first product
+        loadReviews();
     }
 
-    loadSummaryStats();
-    loadDashboard();
+    // ── Summary stats ──────────────────────────────────────────────────────
+    async function loadSummary() {
+        const res = await fetch(`/api/dashboard/summary?group_id=${currentGroupId}&period=${currentPeriod}`);
+        const d   = await res.json();
+
+        document.getElementById('stat-products').textContent = d.total_products ?? '—';
+        document.getElementById('stat-keywords').textContent = d.total_keywords ?? '—';
+        document.getElementById('stat-content').textContent  = d.content_changes ?? '—';
+        document.getElementById('stat-skus').textContent     = d.new_skus ?? '—';
+
+        if (d.avg_rank?.current != null) {
+            document.getElementById('stat-rank').textContent = d.avg_rank.current;
+            const delta = d.avg_rank.delta;
+            if (delta != null) {
+                const improved = delta < 0;
+                document.getElementById('stat-rank-delta').innerHTML =
+                    `<span style="color:${improved ? 'var(--success)' : 'var(--danger)'}">${improved ? '▲' : '▼'} ${Math.abs(delta)} vs prior</span>`;
+            }
+        }
+
+        if (d.avg_sos_pct?.current != null) {
+            document.getElementById('stat-sos').textContent = d.avg_sos_pct.current + '%';
+            const delta = d.avg_sos_pct.delta;
+            if (delta != null) {
+                const improved = delta > 0;
+                document.getElementById('stat-sos-delta').innerHTML =
+                    `<span style="color:${improved ? 'var(--success)' : 'var(--danger)'}">${improved ? '▲' : '▼'} ${Math.abs(delta)}% vs prior</span>`;
+            }
+        }
+    }
+
+    // ── Search Rank ────────────────────────────────────────────────────────
+    async function loadSearchRank() {
+        const kwId = document.getElementById('rank-keyword-select').value;
+        if (!kwId || !currentGroupId) { renderEmpty('chart-search-rank', 'Select a keyword above'); return; }
+
+        const res = await fetch(`/api/dashboard/search-rank?group_id=${currentGroupId}&keyword_id=${kwId}&period=${currentPeriod}`);
+        const d   = await res.json();
+
+        if (!d.products?.length) { renderEmpty('chart-search-rank', 'No rank data for this keyword'); return; }
+
+        const traces = d.products.map(p => ({
+            x: p.dates,
+            y: p.positions,
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: p.product_name.substring(0, 30),
+            line: { color: getBrandColor(p.product_name), width: 2 },
+            marker: { size: 5 },
+        }));
+
+        const layout = {
+            ...PLOTLY_LAYOUT,
+            yaxis: { ...PLOTLY_LAYOUT.yaxis, autorange: 'reversed', title: 'Position' },
+            hovermode: 'x unified',
+        };
+
+        Plotly.newPlot('chart-search-rank', traces, layout, PLOTLY_CONFIG);
+    }
+
+    // ── Share of Search ────────────────────────────────────────────────────
+    async function loadSOS() {
+        const kwId = document.getElementById('sos-keyword-select').value;
+        if (!kwId || !currentGroupId) { renderEmpty('chart-sos', 'Select a keyword above'); return; }
+
+        const res = await fetch(`/api/dashboard/share-of-search?group_id=${currentGroupId}&keyword_id=${kwId}&period=${currentPeriod}`);
+        const d   = await res.json();
+
+        if (!d.brands?.length) { renderEmpty('chart-sos', 'No SOS data for this keyword'); return; }
+
+        const traces = d.brands.map(b => ({
+            x: d.dates,
+            y: b.total,
+            type: 'bar',
+            name: b.brand_name,
+            marker: { color: b.brand_name === 'Other' ? '#C0CDD6' : getBrandColor(b.brand_name) },
+            hovertemplate: '%{y} slots<extra>' + b.brand_name + '</extra>',
+        }));
+
+        const layout = {
+            ...PLOTLY_LAYOUT,
+            barmode: 'stack',
+            yaxis: { ...PLOTLY_LAYOUT.yaxis, title: 'Page 1 Slots' },
+            hovermode: 'x unified',
+        };
+
+        Plotly.newPlot('chart-sos', traces, layout, PLOTLY_CONFIG);
+    }
+
+    // ── Pricing ────────────────────────────────────────────────────────────
+    async function loadPricing() {
+        if (!currentGroupId) return;
+        const res = await fetch(`/api/dashboard/pricing?group_id=${currentGroupId}&period=${currentPeriod}`);
+        const d   = await res.json();
+
+        if (!d.products?.length) { renderEmpty('chart-pricing', 'No pricing data yet'); return; }
+
+        // Deduplicate dates per product (take last price if duplicate date)
+        const traces = d.products.map(p => {
+            const deduped = {};
+            p.dates.forEach((dt, i) => { deduped[dt] = p.prices[i]; });
+            const dates  = Object.keys(deduped).sort();
+            const prices = dates.map(dt => deduped[dt]);
+            return {
+                x: dates,
+                y: prices,
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: p.product_name.substring(0, 30),
+                line: { color: getBrandColor(p.brand_name), width: 2,
+                        dash: p.type === 'mine' ? 'solid' : 'dot' },
+                marker: { size: 5 },
+                hovertemplate: '$%{y:.2f}<extra>' + p.product_name.substring(0,25) + '</extra>',
+            };
+        });
+
+        const layout = {
+            ...PLOTLY_LAYOUT,
+            yaxis: { ...PLOTLY_LAYOUT.yaxis, title: 'Price ($)', tickprefix: '$' },
+            hovermode: 'x unified',
+        };
+
+        Plotly.newPlot('chart-pricing', traces, layout, PLOTLY_CONFIG);
+    }
+
+    // ── Reviews ────────────────────────────────────────────────────────────
+    async function loadReviews() {
+        if (!currentGroupId) return;
+        const res = await fetch(`/api/dashboard/reviews?group_id=${currentGroupId}&period=${currentPeriod}`);
+        const d   = await res.json();
+
+        if (!d.products?.length) { renderEmpty('chart-reviews', 'No review data yet'); return; }
+
+        const selectedId = document.getElementById('reviews-product-select').value;
+        const products   = selectedId
+            ? d.products.filter(p => p.product_id === parseInt(selectedId))
+            : d.products;
+
+        if (!products.length) { renderEmpty('chart-reviews', 'No data for selected product'); return; }
+
+        const traces = [];
+        products.forEach(p => {
+            // Deduplicate
+            const deduped = {};
+            p.dates.forEach((dt, i) => {
+                deduped[dt] = { count: p.review_counts[i], rating: p.avg_ratings[i] };
+            });
+            const dates = Object.keys(deduped).sort();
+
+            traces.push({
+                x: dates,
+                y: dates.map(dt => deduped[dt].count),
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: p.product_name.substring(0,25) + ' (reviews)',
+                line: { color: getBrandColor(p.brand_name), width: 2 },
+                marker: { size: 5 },
+                yaxis: 'y',
+            });
+            traces.push({
+                x: dates,
+                y: dates.map(dt => deduped[dt].rating),
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: p.product_name.substring(0,25) + ' (rating)',
+                line: { color: getBrandColor(p.brand_name), width: 1.5, dash: 'dot' },
+                marker: { size: 4 },
+                yaxis: 'y2',
+            });
+        });
+
+        const layout = {
+            ...PLOTLY_LAYOUT,
+            yaxis:  { ...PLOTLY_LAYOUT.yaxis, title: 'Review Count' },
+            yaxis2: { title: 'Avg Rating', overlaying: 'y', side: 'right',
+                      range: [0, 5], gridcolor: 'transparent' },
+            hovermode: 'x unified',
+        };
+
+        Plotly.newPlot('chart-reviews', traces, layout, PLOTLY_CONFIG);
+    }
+
+    // ── Content Changes ────────────────────────────────────────────────────
+    async function loadContentChanges() {
+        if (!currentGroupId) return;
+        const res = await fetch(`/api/dashboard/content-changes?group_id=${currentGroupId}&period=${currentPeriod}`);
+        const rows = await res.json();
+        const el   = document.getElementById('content-changes-list');
+        document.getElementById('content-count').textContent = rows.length ? `${rows.length} change${rows.length !== 1 ? 's' : ''}` : '';
+
+        if (!rows.length) {
+            el.innerHTML = '<div class="empty-state"><strong>No content changes</strong><p>Competitor listing changes will appear here.</p></div>';
+            return;
+        }
+
+        el.innerHTML = `<table style="width:100%;font-size:12.5px;border-collapse:collapse;">
+            <thead><tr style="border-bottom:1px solid var(--border);">
+                <th style="padding:8px 14px;text-align:left;font-size:11px;color:var(--ink-3);font-weight:700;text-transform:uppercase;">Date</th>
+                <th style="padding:8px 14px;text-align:left;font-size:11px;color:var(--ink-3);font-weight:700;text-transform:uppercase;">Product</th>
+                <th style="padding:8px 14px;text-align:left;font-size:11px;color:var(--ink-3);font-weight:700;text-transform:uppercase;">Field</th>
+            </tr></thead>
+            <tbody>${rows.map(r => `
+                <tr style="border-bottom:1px solid var(--border);">
+                    <td style="padding:9px 14px;color:var(--ink-3);">${r.detected_at}</td>
+                    <td style="padding:9px 14px;"><strong>${esc(r.brand_name)}</strong><br><span style="color:var(--ink-3);font-size:11px;">${esc(r.product_name.substring(0,40))}</span></td>
+                    <td style="padding:9px 14px;"><span class="badge badge-inactive">${esc(r.field_changed)}</span></td>
+                </tr>`).join('')}
+            </tbody></table>`;
+    }
+
+    // ── New SKUs ───────────────────────────────────────────────────────────
+    async function loadNewSKUs() {
+        if (!currentGroupId) return;
+        const res  = await fetch(`/api/dashboard/new-skus?group_id=${currentGroupId}&period=${currentPeriod}`);
+        const rows = await res.json();
+        const el   = document.getElementById('new-sku-list');
+        document.getElementById('sku-count').textContent = rows.length ? `${rows.length} new` : '';
+
+        if (!rows.length) {
+            el.innerHTML = '<div class="empty-state"><strong>No new SKUs detected</strong><p>New competitor SKUs on page 1 will appear here.</p></div>';
+            return;
+        }
+
+        el.innerHTML = `<table style="width:100%;font-size:12.5px;border-collapse:collapse;">
+            <thead><tr style="border-bottom:1px solid var(--border);">
+                <th style="padding:8px 14px;text-align:left;font-size:11px;color:var(--ink-3);font-weight:700;text-transform:uppercase;">First Seen</th>
+                <th style="padding:8px 14px;text-align:left;font-size:11px;color:var(--ink-3);font-weight:700;text-transform:uppercase;">Brand</th>
+                <th style="padding:8px 14px;text-align:left;font-size:11px;color:var(--ink-3);font-weight:700;text-transform:uppercase;">Keyword</th>
+                <th style="padding:8px 14px;text-align:left;font-size:11px;color:var(--ink-3);font-weight:700;text-transform:uppercase;">Item ID</th>
+            </tr></thead>
+            <tbody>${rows.map(r => `
+                <tr style="border-bottom:1px solid var(--border);">
+                    <td style="padding:9px 14px;color:var(--ink-3);">${r.first_seen}</td>
+                    <td style="padding:9px 14px;"><strong>${esc(r.brand_name)}</strong></td>
+                    <td style="padding:9px 14px;">${esc(r.keyword)}</td>
+                    <td style="padding:9px 14px;font-family:monospace;font-size:11px;">${esc(r.item_id)}</td>
+                </tr>`).join('')}
+            </tbody></table>`;
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+    function renderEmpty(containerId, message) {
+        Plotly.newPlot(containerId, [], {
+            ...PLOTLY_LAYOUT,
+            annotations: [{ text: message, xref: 'paper', yref: 'paper',
+                x: 0.5, y: 0.5, showarrow: false, font: { size: 12, color: '#7A909F' } }],
+            xaxis: { visible: false }, yaxis: { visible: false },
+        }, PLOTLY_CONFIG);
+    }
+
+    function esc(str) {
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    init();
 </script>
 {% endblock %}
