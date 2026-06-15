@@ -13,7 +13,7 @@
     <style>
         /* ── DESIGN TOKENS ─────────────────────────────────────────── */
         :root {
-            --ink:        #0F1923;   /* near-black, primary text */
+            --ink:        #0F1923;   /* near-black, primary text — used for body text */
             --ink-2:      #3D4F5C;   /* secondary text */
             --ink-3:      #7A909F;   /* muted/disabled */
             --surface:    #F5F7F9;   /* page background */
@@ -54,7 +54,7 @@
         .nav {
             width: var(--nav-width);
             min-height: 100vh;
-            background: var(--ink);
+            background: #243447;
             display: flex;
             flex-direction: column;
             flex-shrink: 0;
@@ -70,7 +70,7 @@
             font-weight: 700;
             letter-spacing: .12em;
             text-transform: uppercase;
-            color: var(--accent);
+            color: #FFC220;
         }
         .nav-logo-name {
             font-size: 13px;
@@ -356,6 +356,10 @@
         <a href="/config/keywords" class="nav-link {% if '/config/keywords' in request.url.path %}active{% endif %}">
             <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             Keywords
+        </a>
+        <a href="/config/groups" class="nav-link {% if '/config/groups' in request.url.path %}active{% endif %}">
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+            Tracking Groups
         </a>
     </div>
 

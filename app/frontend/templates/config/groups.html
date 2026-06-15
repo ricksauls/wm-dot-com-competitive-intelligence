@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}Tracking Groups{% endblock %}
+{% block page_title %}Tracking Groups{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm" onclick="openModal('add')">
+    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    Add Group
+</button>
+{% endblock %}
+
+{% block content %}
+<div id="page-alert"></div>
+
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">All Tracking Groups</span>
+        <span class="text-muted text-sm" id="group-count"></span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Group Name</th>
+                    <th>Description</th>
+                    <th>Brands</th>
+                    <th>Products</th>
+                    <th>Keywords</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="groups-table-body">
+                <tr><td colspan="7"><div class="empty-state">Loading...</div></td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ADD / EDIT MODAL -->
+<div class="modal-backdrop" id="modal-backdrop">
+    <div class="modal" style="max-width:580px;">
+        <div class="modal-header">
+            <span class="modal-title" id="modal-title">Add Tracking Group</span>
+            <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div id="form-alert"></div>
+            <div class="form-group">
+                <label class="form-label" for="group-name">Group Name</label>
+                <input class="form-control" type="text" id="group-name" placeholder="e.g. Original Hot Sauce Tracking">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="group-desc">Description</label>
+                <input class="form-control" type="text" id="group-desc" placeholder="Optional description">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Brands</label>
+                <div id="brand-checkboxes" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:140px;overflow-y:auto;padding:4px;border:1px solid var(--border);border-radius:var(--radius);"></div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Products</label>
+                <div id="product-checkboxes" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:140px;overflow-y:auto;padding:4px;border:1px solid var(--border);border-radius:var(--radius);"></div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Keywords</label>
+                <div id="keyword-checkboxes" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:140px;overflow-y:auto;padding:4px;border:1px solid var(--border);border-radius:var(--radius);"></div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">
+                    <input type="checkbox" id="group-active" checked style="margin-right:6px;">
+                    Active
+                </label>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" id="modal-save-btn" onclick="saveGroup()">Save Group</button>
+        </div>
+    </div>
+</div>
+
+<!-- DELETE CONFIRM MODAL -->
+<div class="modal-backdrop" id="delete-backdrop">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">Delete Tracking Group</span>
+            <button class="modal-close" onclick="closeDeleteModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:13.5px;color:var(--ink-2);">
+                Delete <strong id="delete-group-name"></strong>? This cannot be undone.
+                Brands, products, and keywords will not be deleted — only the group association.
+            </p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+            <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let groups = [];
+    let allBrands = [];
+    let allProducts = [];
+    let allKeywords = [];
+    let editingId = null;
+    let deletingId = null;
+
+    async function loadData() {
+        const [gRes, bRes, pRes, kRes] = await Promise.all([
+            fetch('/api/groups/'),
+            fetch('/api/brands/'),
+            fetch('/api/products/'),
+            fetch('/api/keywords/'),
+        ]);
+        groups      = await gRes.json();
+        allBrands   = await bRes.json();
+        allProducts = await pRes.json();
+        allKeywords = await kRes.json();
+        renderTable();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('groups-table-body');
+        document.getElementById('group-count').textContent =
+            `${groups.length} group${groups.length !== 1 ? 's' : ''}`;
+
+        if (!groups.length) {
+            tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">
+                <strong>No tracking groups yet</strong>
+                <p>Create a group to define a set of brands, products, and keywords to track together.</p>
+            </div></td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = groups.map(g => `
+            <tr>
+                <td><strong>${esc(g.name)}</strong></td>
+                <td class="text-muted text-sm">${esc(g.description || '—')}</td>
+                <td>${g.brands.map(b => `<span class="badge ${b.type === 'mine' ? 'badge-mine' : 'badge-competitor'}" style="margin:1px">${esc(b.name)}</span>`).join(' ') || '<span class="text-muted text-sm">None</span>'}</td>
+                <td class="text-sm">${g.products.length} product${g.products.length !== 1 ? 's' : ''}</td>
+                <td class="text-sm">${g.keywords.length} keyword${g.keywords.length !== 1 ? 's' : ''}</td>
+                <td>${g.active
+                    ? '<span class="badge badge-active">Active</span>'
+                    : '<span class="badge badge-inactive">Inactive</span>'}</td>
+                <td style="text-align:right;">
+                    <button class="btn btn-secondary btn-sm" onclick="openModal('edit', ${g.id})">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="openDeleteModal(${g.id}, '${esc(g.name)}')">Delete</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function populateCheckboxes(group) {
+        const selectedBrandIds   = new Set((group?.brands   || []).map(b => b.id));
+        const selectedProductIds = new Set((group?.products || []).map(p => p.id));
+        const selectedKeywordIds = new Set((group?.keywords || []).map(k => k.id));
+
+        document.getElementById('brand-checkboxes').innerHTML = allBrands.map(b => `
+            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;">
+                <input type="checkbox" value="${b.id}" class="cb-brand" ${selectedBrandIds.has(b.id) ? 'checked' : ''}>
+                ${esc(b.name)} <span class="badge ${b.type === 'mine' ? 'badge-mine' : 'badge-competitor'}" style="font-size:9px">${b.type}</span>
+            </label>`).join('');
+
+        document.getElementById('product-checkboxes').innerHTML = allProducts.map(p => `
+            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;">
+                <input type="checkbox" value="${p.id}" class="cb-product" ${selectedProductIds.has(p.id) ? 'checked' : ''}>
+                ${esc(p.name)}
+            </label>`).join('');
+
+        document.getElementById('keyword-checkboxes').innerHTML = allKeywords.map(k => `
+            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;">
+                <input type="checkbox" value="${k.id}" class="cb-keyword" ${selectedKeywordIds.has(k.id) ? 'checked' : ''}>
+                ${esc(k.keyword)}
+            </label>`).join('');
+    }
+
+    function openModal(mode, id = null) {
+        editingId = id;
+        document.getElementById('form-alert').innerHTML = '';
+        document.getElementById('modal-title').textContent = mode === 'add' ? 'Add Tracking Group' : 'Edit Tracking Group';
+        document.getElementById('modal-save-btn').textContent = mode === 'add' ? 'Save Group' : 'Update Group';
+
+        const group = mode === 'edit' ? groups.find(g => g.id === id) : null;
+        document.getElementById('group-name').value   = group?.name || '';
+        document.getElementById('group-desc').value   = group?.description || '';
+        document.getElementById('group-active').checked = group ? group.active : true;
+        populateCheckboxes(group);
+
+        document.getElementById('modal-backdrop').classList.add('open');
+        setTimeout(() => document.getElementById('group-name').focus(), 50);
+    }
+
+    function closeModal() {
+        document.getElementById('modal-backdrop').classList.remove('open');
+        editingId = null;
+    }
+
+    function getCheckedIds(cls) {
+        return Array.from(document.querySelectorAll(`.${cls}:checked`)).map(el => parseInt(el.value));
+    }
+
+    async function saveGroup() {
+        const name        = document.getElementById('group-name').value.trim();
+        const description = document.getElementById('group-desc').value.trim() || null;
+        const active      = document.getElementById('group-active').checked;
+        const brand_ids   = getCheckedIds('cb-brand');
+        const product_ids = getCheckedIds('cb-product');
+        const keyword_ids = getCheckedIds('cb-keyword');
+
+        if (!name) { showAlert('form-alert', 'Group name is required.', 'danger'); return; }
+
+        const method = editingId ? 'PUT' : 'POST';
+        const url    = editingId ? `/api/groups/${editingId}` : '/api/groups/';
+        const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description, active, brand_ids, product_ids, keyword_ids })
+        });
+        if (res.ok) {
+            closeModal();
+            loadData();
+        } else {
+            const err = await res.json();
+            showAlert('form-alert', err.detail || 'Something went wrong.', 'danger');
+        }
+    }
+
+    function openDeleteModal(id, name) {
+        deletingId = id;
+        document.getElementById('delete-group-name').textContent = name;
+        document.getElementById('delete-backdrop').classList.add('open');
+    }
+
+    function closeDeleteModal() {
+        document.getElementById('delete-backdrop').classList.remove('open');
+        deletingId = null;
+    }
+
+    async function confirmDelete() {
+        const res = await fetch(`/api/groups/${deletingId}`, { method: 'DELETE' });
+        closeDeleteModal();
+        if (res.ok) { loadData(); }
+        else { const err = await res.json(); alert(err.detail || 'Could not delete group.'); }
+    }
+
+    function showAlert(containerId, message, type) {
+        document.getElementById(containerId).innerHTML =
+            `<div class="alert alert-${type}">${message}</div>`;
+    }
+
+    function esc(str) {
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    document.getElementById('modal-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+    document.getElementById('delete-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeDeleteModal(); });
+
+    loadData();
+</script>
+{% endblock %}

@@ -156,3 +156,41 @@ class ReviewDelta(Base):
     avg_rating_delta = Column(Numeric(3, 2), nullable=True)
 
     product = relationship("Product", back_populates="review_deltas")
+
+
+# --- TRACKING GROUPS ---
+
+# Junction tables (defined as Table objects for many-to-many)
+from sqlalchemy import Table
+
+group_brands = Table(
+    'group_brands', Base.metadata,
+    Column('group_id', Integer, ForeignKey('tracking_groups.id', ondelete='CASCADE'), primary_key=True),
+    Column('brand_id', Integer, ForeignKey('brands.id', ondelete='CASCADE'), primary_key=True),
+)
+
+group_products = Table(
+    'group_products', Base.metadata,
+    Column('group_id', Integer, ForeignKey('tracking_groups.id', ondelete='CASCADE'), primary_key=True),
+    Column('product_id', Integer, ForeignKey('products.id', ondelete='CASCADE'), primary_key=True),
+)
+
+group_keywords = Table(
+    'group_keywords', Base.metadata,
+    Column('group_id', Integer, ForeignKey('tracking_groups.id', ondelete='CASCADE'), primary_key=True),
+    Column('keyword_id', Integer, ForeignKey('keywords.id', ondelete='CASCADE'), primary_key=True),
+)
+
+
+class TrackingGroup(Base):
+    __tablename__ = "tracking_groups"
+
+    id          = Column(Integer, primary_key=True)
+    name        = Column(String(255), nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    active      = Column(Boolean, nullable=False, default=True)
+    created_at  = Column(DateTime, server_default=func.now())
+
+    brands   = relationship("Brand",   secondary=group_brands,   backref="groups")
+    products = relationship("Product", secondary=group_products, backref="groups")
+    keywords = relationship("Keyword", secondary=group_keywords, backref="groups")

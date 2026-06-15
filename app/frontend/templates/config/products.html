@@ -4,6 +4,11 @@
 {% block page_title %}Products{% endblock %}
 
 {% block topbar_actions %}
+<button class="btn btn-secondary btn-sm" onclick="document.getElementById('prod-csv-upload').click()">
+    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+    Upload CSV
+</button>
+<input type="file" id="prod-csv-upload" accept=".csv" style="display:none;" onchange="handleCSV(event)">
 <button class="btn btn-primary btn-sm" onclick="openModal('add')">
     <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
     Add Product
@@ -12,6 +17,7 @@
 
 {% block content %}
 
+<div id="page-alert"></div>
 <!-- FILTER BAR -->
 <div class="flex items-center gap-3" style="margin-bottom:16px;">
     <select class="form-control" id="filter-brand" style="width:auto;min-width:160px;" onchange="renderTable()">
@@ -103,6 +109,33 @@
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
             <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+        </div>
+    </div>
+</div>
+
+<!-- CSV PREVIEW MODAL -->
+<div class="modal-backdrop" id="csv-backdrop">
+    <div class="modal" style="max-width:640px;">
+        <div class="modal-header">
+            <span class="modal-title">Import Products from CSV</span>
+            <button class="modal-close" onclick="closeCSVModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div id="csv-alert"></div>
+            <p style="font-size:12px;color:var(--ink-3);margin-bottom:12px;">
+                Expected columns: <code>name, brand_name, walmart_item_id, walmart_url</code><br>
+                brand_name must exactly match an existing brand name.
+            </p>
+            <div class="table-wrap" style="max-height:260px;overflow-y:auto;">
+                <table>
+                    <thead><tr><th>Name</th><th>Brand</th><th>Item ID</th><th>Status</th></tr></thead>
+                    <tbody id="csv-preview-body"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeCSVModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="importCSV()">Import All</button>
         </div>
     </div>
 </div>
@@ -275,5 +308,82 @@
     document.getElementById('delete-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeDeleteModal(); });
 
     loadData();
+
+    let csvRows = [];
+
+    function handleCSV(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const lines = e.target.result.split('\n').filter(l => l.trim());
+            if (!lines.length) return;
+            const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
+            const nameIdx   = headers.indexOf('name');
+            const brandIdx  = headers.indexOf('brand_name');
+            const itemIdx   = headers.indexOf('walmart_item_id');
+            const urlIdx    = headers.indexOf('walmart_url');
+            if (nameIdx === -1 || brandIdx === -1 || itemIdx === -1 || urlIdx === -1) {
+                alert('CSV must have columns: name, brand_name, walmart_item_id, walmart_url');
+                return;
+            }
+            // Build brand name → id map
+            const brandNameMap = {};
+            brands.forEach(b => { brandNameMap[b.name.toLowerCase()] = b.id; });
+            csvRows = [];
+            const tbody = document.getElementById('csv-preview-body');
+            tbody.innerHTML = '';
+            for (let i = 1; i < lines.length; i++) {
+                const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+                const name    = cols[nameIdx] || '';
+                const brandName = cols[brandIdx] || '';
+                const itemId  = cols[itemIdx] || '';
+                const url     = cols[urlIdx] || '';
+                if (!name || !itemId) continue;
+                const brandId = brandNameMap[brandName.toLowerCase()];
+                const valid = !!(brandId && itemId && url);
+                csvRows.push({ name, brand_id: brandId, walmart_item_id: itemId, walmart_url: url, valid, brandName });
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${esc(name)}</td><td>${esc(brandName)}</td><td class="text-mono">${esc(itemId)}</td>
+                    <td>${valid ? '<span class="badge badge-active">Ready</span>' : '<span class="badge badge-inactive">Brand not found</span>'}</td>`;
+                tbody.appendChild(tr);
+            }
+            document.getElementById('csv-alert').innerHTML = '';
+            document.getElementById('csv-backdrop').classList.add('open');
+            event.target.value = '';
+        };
+        reader.readAsText(file);
+    }
+
+    function closeCSVModal() {
+        document.getElementById('csv-backdrop').classList.remove('open');
+        csvRows = [];
+    }
+
+    async function importCSV() {
+        const valid = csvRows.filter(r => r.valid);
+        if (!valid.length) { showAlert('csv-alert', 'No valid rows to import.', 'danger'); return; }
+        let success = 0, errors = 0;
+        for (const row of valid) {
+            const res = await fetch('/api/products/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: row.name,
+                    brand_id: row.brand_id,
+                    walmart_item_id: row.walmart_item_id,
+                    walmart_url: row.walmart_url,
+                    active: true
+                })
+            });
+            if (res.ok) success++; else errors++;
+        }
+        closeCSVModal();
+        loadData();
+        showAlert('page-alert', `Imported ${success} product${success !== 1 ? 's' : ''}${errors ? ` (${errors} failed — duplicates or missing brands)` : ''}.`, 'success');
+    }
+
+    document.getElementById('csv-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeCSVModal(); });
+
 </script>
 {% endblock %}

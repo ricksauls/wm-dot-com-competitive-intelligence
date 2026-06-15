@@ -1,5 +1,5 @@
 from pydantic import BaseModel, HttpUrl
-from typing import Optional
+from typing import Optional, List
 from datetime import date, datetime
 from app.models import BrandType
 
@@ -71,6 +71,37 @@ class KeywordUpdate(BaseModel):
 class KeywordOut(KeywordBase):
     id: int
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# --- TRACKING GROUPS ---
+
+class TrackingGroupBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    active: bool = True
+
+class TrackingGroupCreate(TrackingGroupBase):
+    brand_ids:   List[int] = []
+    product_ids: List[int] = []
+    keyword_ids: List[int] = []
+
+class TrackingGroupUpdate(BaseModel):
+    name:        Optional[str] = None
+    description: Optional[str] = None
+    active:      Optional[bool] = None
+    brand_ids:   Optional[List[int]] = None
+    product_ids: Optional[List[int]] = None
+    keyword_ids: Optional[List[int]] = None
+
+class TrackingGroupOut(TrackingGroupBase):
+    id:         int
+    created_at: datetime
+    brands:     List[BrandOut]   = []
+    products:   List[ProductOut] = []
+    keywords:   List[KeywordOut] = []
 
     class Config:
         from_attributes = True

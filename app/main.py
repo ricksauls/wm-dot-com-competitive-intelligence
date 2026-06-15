@@ -82,3 +82,9 @@ def config_keywords(request: Request, user=Depends(require_login)):
     if isinstance(user, RedirectResponse):
         return user
     return templates.TemplateResponse("config/keywords.html", {"request": request, "user": user})
+
+@app.get('/config/groups')
+def config_groups(request: Request, user=Depends(require_login)):
+    if isinstance(user, RedirectResponse):
+        return user
+    return templates.TemplateResponse("config/groups.html", {"request": request, "user": user})

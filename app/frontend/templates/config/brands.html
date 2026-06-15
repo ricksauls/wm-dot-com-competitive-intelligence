@@ -4,6 +4,11 @@
 {% block page_title %}Brands{% endblock %}
 
 {% block topbar_actions %}
+<button class="btn btn-secondary btn-sm" onclick="document.getElementById('csv-upload').click()">
+    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+    Upload CSV
+</button>
+<input type="file" id="csv-upload" accept=".csv" style="display:none;" onchange="handleCSV(event)">
 <button class="btn btn-primary btn-sm" onclick="openModal('add')">
     <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
     Add Brand
@@ -11,6 +16,7 @@
 {% endblock %}
 
 {% block content %}
+<div id="page-alert"></div>
 <div class="card">
     <div class="card-header">
         <span class="card-title">All Brands</span>
@@ -84,6 +90,35 @@
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
             <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+        </div>
+    </div>
+</div>
+
+<!-- CSV PREVIEW MODAL -->
+<div class="modal-backdrop" id="csv-backdrop">
+    <div class="modal" style="max-width:560px;">
+        <div class="modal-header">
+            <span class="modal-title">Import Brands from CSV</span>
+            <button class="modal-close" onclick="closeCSVModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div id="csv-alert"></div>
+            <p style="font-size:12px;color:var(--ink-3);margin-bottom:12px;">
+                Expected columns: <code>name, type, tracked</code><br>
+                type = <code>mine</code> or <code>competitor</code> &nbsp;|&nbsp; tracked = <code>true</code> or <code>false</code>
+            </p>
+            <div class="table-wrap" style="max-height:260px;overflow-y:auto;">
+                <table>
+                    <thead>
+                        <tr><th>Name</th><th>Type</th><th>Tracked</th><th>Status</th></tr>
+                    </thead>
+                    <tbody id="csv-preview-body"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeCSVModal()">Cancel</button>
+            <button class="btn btn-primary" id="csv-import-btn" onclick="importCSV()">Import All</button>
         </div>
     </div>
 </div>
@@ -213,5 +248,70 @@
     document.getElementById('delete-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeDeleteModal(); });
 
     loadBrands();
+
+    let csvRows = [];
+
+    function handleCSV(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const lines = e.target.result.split('\n').filter(l => l.trim());
+            if (!lines.length) return;
+            const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
+            const nameIdx    = headers.indexOf('name');
+            const typeIdx    = headers.indexOf('type');
+            const trackedIdx = headers.indexOf('tracked');
+            if (nameIdx === -1 || typeIdx === -1) {
+                alert('CSV must have at least "name" and "type" columns.');
+                return;
+            }
+            csvRows = [];
+            const tbody = document.getElementById('csv-preview-body');
+            tbody.innerHTML = '';
+            for (let i = 1; i < lines.length; i++) {
+                const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+                const name    = cols[nameIdx] || '';
+                const type    = (cols[typeIdx] || '').toLowerCase();
+                const tracked = trackedIdx >= 0 ? cols[trackedIdx].toLowerCase() !== 'false' : true;
+                if (!name) continue;
+                const valid = (type === 'mine' || type === 'competitor');
+                csvRows.push({ name, type, tracked, valid });
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${esc(name)}</td><td>${esc(type)}</td><td>${tracked ? 'Yes' : 'No'}</td>
+                    <td>${valid ? '<span class="badge badge-active">Ready</span>' : '<span class="badge badge-inactive">Invalid type</span>'}</td>`;
+                tbody.appendChild(tr);
+            }
+            document.getElementById('csv-alert').innerHTML = '';
+            document.getElementById('csv-backdrop').classList.add('open');
+            event.target.value = '';
+        };
+        reader.readAsText(file);
+    }
+
+    function closeCSVModal() {
+        document.getElementById('csv-backdrop').classList.remove('open');
+        csvRows = [];
+    }
+
+    async function importCSV() {
+        const valid = csvRows.filter(r => r.valid);
+        if (!valid.length) { showAlert('csv-alert', 'No valid rows to import.', 'danger'); return; }
+        let success = 0, errors = 0;
+        for (const row of valid) {
+            const res = await fetch('/api/brands/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: row.name, type: row.type, tracked: row.tracked })
+            });
+            if (res.ok) success++; else errors++;
+        }
+        closeCSVModal();
+        loadBrands();
+        showAlert('page-alert', `Imported ${success} brand${success !== 1 ? 's' : ''}${errors ? ` (${errors} failed — duplicates skipped)` : ''}.`, 'success');
+    }
+
+    document.getElementById('csv-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeCSVModal(); });
+
 </script>
 {% endblock %}
