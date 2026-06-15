@@ -257,21 +257,23 @@ async def scrape_product_page(page, product) -> dict:
     }
 
     try:
-        # Warm up session on walmart.com homepage before hitting PDP directly.
-        # Going cold to a PDP URL triggers bot detection — this mimics how a
-        # real shopper arrives (browse homepage first, then navigate to product).
-        log.debug("[%s] warming up session on walmart.com...", product.name)
-        await page.goto("https://www.walmart.com", wait_until="domcontentloaded", timeout=30000)
+        # Warm up session via a search page before hitting PDP directly.
+        # Walmart blocks cold direct PDP navigation — search pages are less
+        # aggressively protected. This mimics how a real shopper finds a product.
+        # Use a generic search term to avoid tipping off brand-specific monitoring.
+        warmup_url = "https://www.walmart.com/search?q=hot+sauce"
+        log.debug("[%s] warming up session via search page...", product.name)
+        await page.goto(warmup_url, wait_until="domcontentloaded", timeout=30000)
         await asyncio.sleep(random.uniform(4, 7))
 
-        # Check for block on homepage
-        home_text = (await page.inner_text("body")).lower()
-        if any(x in home_text for x in [
+        # Check for block on warmup page
+        warmup_text = (await page.inner_text("body")).lower()
+        if any(x in warmup_text for x in [
             "captcha", "access denied", "unusual traffic",
             "verify you are human", "blocked", "robot"
         ]):
             result["error"] = "BLOCKED"
-            log.warning("[%s] blocked on homepage warmup", product.name)
+            log.warning("[%s] blocked on search warmup", product.name)
             return result
 
         # Now navigate to the product page
