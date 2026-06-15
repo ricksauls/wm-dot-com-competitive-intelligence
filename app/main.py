@@ -32,7 +32,11 @@ def login_page(request: Request):
         return RedirectResponse(url="/")
     return templates.TemplateResponse("auth/login.html", {"request": request})
 
-
+@app.get('/config/groups')
+def config_groups(request: Request, user=Depends(require_login)):
+    if isinstance(user, RedirectResponse):
+        return user
+    return templates.TemplateResponse("config/groups.html", {"request": request, "user": user})
 @app.post("/login")
 async def login(request: Request):
     form = await request.form()
@@ -163,3 +167,13 @@ def dashboard_new_skus(
     _=Depends(get_current_user),
 ):
     return analysis.get_new_sku_alerts(db, group_id, period)
+
+
+@app.get("/api/dashboard/brand-comparison")
+def dashboard_brand_comparison(
+    group_id: int,
+    period: str = Query(default="wow", regex="^(wow|mom|qoq|yoy)$"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    return analysis.get_brand_comparison(db, group_id, period)

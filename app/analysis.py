@@ -450,21 +450,25 @@ def get_new_sku_alerts(db: Session, group_id: int, period: str) -> list:
 
 def get_summary_stats(db: Session, group_id: int, period: str) -> dict:
     """
-    Return summary stat card data: current values + delta vs prior period.
+    Return summary stat card data split into my brand vs competitor average.
 
     Returns:
         {
-          "total_keywords":   10,
-          "total_products":   6,
-          "new_skus":         2,
-          "content_changes":  5,
-          "avg_rank": {
-            "current": 4.2,
-            "delta":   -0.8   # negative = improved (lower rank number)
+          "total_keywords":  10,
+          "total_products":  6,
+          "new_skus":        2,
+          "content_changes": 5,
+          "mine": {
+            "avg_rank":    {"current": 4.2, "delta": -0.8},
+            "avg_sos_pct": {"current": 18.5, "delta": 1.2},
+            "avg_price":   {"current": 10.68, "delta": 0.10},
+            "avg_rating":  {"current": 4.8, "delta": 0.0},
           },
-          "avg_sos_pct": {
-            "current": 28.5,
-            "delta":   2.1
+          "competitor_avg": {
+            "avg_rank":    {"current": 8.2},
+            "avg_sos_pct": {"current": 10.1},
+            "avg_price":   {"current": 9.12},
+            "avg_rating":  {"current": 4.75},
           }
         }
     """
@@ -473,46 +477,51 @@ def get_summary_stats(db: Session, group_id: int, period: str) -> dict:
 
     keyword_ids     = get_group_keyword_ids(db, group_id)
     product_ids     = get_group_product_ids(db, group_id)
-    my_product_ids  = get_my_product_ids(db, group_id)
     group_brand_ids = get_group_brand_ids(db, group_id)
 
-    # Get my products' item IDs for rank lookup
     group = db.query(TrackingGroup).get(group_id)
-    my_item_ids = [
-        p.walmart_item_id for p in (group.products if group else [])
-        if p.id in my_product_ids
-    ]
+    if not group:
+        return {}
 
-    def avg_rank(start_d, end_d):
-        if not my_item_ids or not keyword_ids:
+    my_brands   = [b for b in group.brands if b.type == "mine"]
+    comp_brands = [b for b in group.brands if b.type == "competitor"]
+
+    my_brand_ids   = [b.id for b in my_brands]
+    comp_brand_ids = [b.id for b in comp_brands]
+
+    my_products   = [p for p in group.products if p.brand_id in my_brand_ids]
+    comp_products = [p for p in group.products if p.brand_id in comp_brand_ids]
+
+    my_item_ids   = [p.walmart_item_id for p in my_products]
+    comp_item_ids = [p.walmart_item_id for p in comp_products]
+    my_prod_ids   = [p.id for p in my_products]
+    comp_prod_ids = [p.id for p in comp_products]
+
+    # ── Helper functions ──────────────────────────────────────────────────
+
+    def avg_rank_for(item_ids, start_d, end_d):
+        if not item_ids or not keyword_ids:
             return None
-        rows = (
+        val = (
             db.query(func.avg(SearchResult.position))
             .filter(
                 SearchResult.keyword_id.in_(keyword_ids),
-                SearchResult.item_id.in_(my_item_ids),
+                SearchResult.item_id.in_(item_ids),
                 SearchResult.scraped_at >= start_d,
                 SearchResult.scraped_at <= end_d,
             )
             .scalar()
         )
-        return round(float(rows), 1) if rows else None
+        return round(float(val), 1) if val else None
 
-    def avg_sos_pct(start_d, end_d):
-        """My brand's share of total page 1 slots as a percentage."""
-        if not keyword_ids or not group_brand_ids:
+    def sos_pct_for(brand_ids, start_d, end_d):
+        if not brand_ids or not keyword_ids:
             return None
-        my_brand_ids = [
-            b.id for b in (group.brands if group else [])
-            if db.query(Brand).get(b.id) and db.query(Brand).get(b.id).type == 'mine'
-        ]
-        if not my_brand_ids:
-            return None
-        my_total = (
+        brand_total = (
             db.query(func.sum(ShareOfSearch.total_count))
             .filter(
                 ShareOfSearch.keyword_id.in_(keyword_ids),
-                ShareOfSearch.brand_id.in_(my_brand_ids),
+                ShareOfSearch.brand_id.in_(brand_ids),
                 ShareOfSearch.date >= start_d,
                 ShareOfSearch.date <= end_d,
             )
@@ -527,13 +536,101 @@ def get_summary_stats(db: Session, group_id: int, period: str) -> dict:
             )
             .scalar() or 0
         )
-        return round((my_total / all_total * 100), 1) if all_total else None
+        if not all_total:
+            return None
+        return round(brand_total / all_total * 100, 1)
 
-    curr_rank  = avg_rank(start, end)
-    prior_rank = avg_rank(prior_start, prior_end)
-    curr_sos   = avg_sos_pct(start, end)
-    prior_sos  = avg_sos_pct(prior_start, prior_end)
+    def avg_price_for(prod_ids, start_d, end_d):
+        if not prod_ids:
+            return None
+        val = (
+            db.query(func.avg(ProductSnapshot.price))
+            .filter(
+                ProductSnapshot.product_id.in_(prod_ids),
+                ProductSnapshot.scraped_at >= start_d,
+                ProductSnapshot.scraped_at <= end_d,
+                ProductSnapshot.price.isnot(None),
+            )
+            .scalar()
+        )
+        return round(float(val), 2) if val else None
 
+    def avg_rating_for(prod_ids, start_d, end_d):
+        if not prod_ids:
+            return None
+        val = (
+            db.query(func.avg(ProductSnapshot.avg_rating))
+            .filter(
+                ProductSnapshot.product_id.in_(prod_ids),
+                ProductSnapshot.scraped_at >= start_d,
+                ProductSnapshot.scraped_at <= end_d,
+                ProductSnapshot.avg_rating.isnot(None),
+            )
+            .scalar()
+        )
+        return round(float(val), 2) if val else None
+
+    def delta(curr, prior):
+        if curr is not None and prior is not None:
+            return round(curr - prior, 2)
+        return None
+
+    def latest_review_count_for(prod_ids):
+        """Get the most recent total review count for a set of products."""
+        if not prod_ids:
+            return None
+        val = (
+            db.query(func.sum(ProductSnapshot.review_count))
+            .filter(
+                ProductSnapshot.product_id.in_(prod_ids),
+                ProductSnapshot.scraped_at == (
+                    db.query(func.max(ProductSnapshot.scraped_at))
+                    .filter(ProductSnapshot.product_id.in_(prod_ids))
+                    .scalar()
+                ),
+                ProductSnapshot.review_count.isnot(None),
+            )
+            .scalar()
+        )
+        return int(val) if val else None
+
+    def prior_review_count_for(prod_ids):
+        """Get review count from the prior period end for delta calculation."""
+        if not prod_ids:
+            return None
+        val = (
+            db.query(func.sum(ProductSnapshot.review_count))
+            .filter(
+                ProductSnapshot.product_id.in_(prod_ids),
+                ProductSnapshot.scraped_at <= prior_end,
+                ProductSnapshot.review_count.isnot(None),
+            )
+            .scalar()
+        )
+        return int(val) if val else None
+
+    # ── My brand metrics ──────────────────────────────────────────────────
+    my_rank_curr    = avg_rank_for(my_item_ids, start, end)
+    my_rank_prior   = avg_rank_for(my_item_ids, prior_start, prior_end)
+    my_sos_curr     = sos_pct_for(my_brand_ids, start, end)
+    my_sos_prior    = sos_pct_for(my_brand_ids, prior_start, prior_end)
+    my_price_curr   = avg_price_for(my_prod_ids, start, end)
+    my_price_prior  = avg_price_for(my_prod_ids, prior_start, prior_end)
+    my_rate_curr    = avg_rating_for(my_prod_ids, start, end)
+    my_rate_prior   = avg_rating_for(my_prod_ids, prior_start, prior_end)
+    my_reviews_curr = latest_review_count_for(my_prod_ids)
+    my_reviews_prior= prior_review_count_for(my_prod_ids)
+
+    # ── Competitor avg metrics ────────────────────────────────────────────
+    comp_sos_values  = [sos_pct_for([b.id], start, end) for b in comp_brands]
+    comp_sos_values  = [v for v in comp_sos_values if v is not None]
+    comp_sos_avg     = round(sum(comp_sos_values) / len(comp_sos_values), 1) if comp_sos_values else None
+    comp_rank_curr   = avg_rank_for(comp_item_ids, start, end)
+    comp_price_curr  = avg_price_for(comp_prod_ids, start, end)
+    comp_rate_curr   = avg_rating_for(comp_prod_ids, start, end)
+    comp_reviews_curr= latest_review_count_for(comp_prod_ids)
+
+    # ── Global counts ─────────────────────────────────────────────────────
     new_skus = (
         db.query(func.count(SearchResult.id))
         .filter(
@@ -548,7 +645,7 @@ def get_summary_stats(db: Session, group_id: int, period: str) -> dict:
     content_changes = (
         db.query(func.count(ContentChange.id))
         .filter(
-            ContentChange.product_id.in_(product_ids),
+            ContentChange.product_id.in_(comp_prod_ids),  # competitor only
             ContentChange.detected_at >= start,
             ContentChange.detected_at <= end,
         )
@@ -560,12 +657,139 @@ def get_summary_stats(db: Session, group_id: int, period: str) -> dict:
         "total_products":  len(product_ids),
         "new_skus":        new_skus,
         "content_changes": content_changes,
-        "avg_rank": {
-            "current": curr_rank,
-            "delta":   round(curr_rank - prior_rank, 1) if curr_rank and prior_rank else None,
+        "mine": {
+            "avg_rank":      {"current": my_rank_curr,    "delta": delta(my_rank_curr,    my_rank_prior)},
+            "avg_sos_pct":   {"current": my_sos_curr,     "delta": delta(my_sos_curr,     my_sos_prior)},
+            "avg_rating":    {"current": my_rate_curr,    "delta": delta(my_rate_curr,    my_rate_prior)},
+            "review_count":  {"current": my_reviews_curr, "delta": delta(my_reviews_curr, my_reviews_prior)},
+            "avg_price":     {"current": my_price_curr,   "delta": delta(my_price_curr,   my_price_prior)},
         },
-        "avg_sos_pct": {
-            "current": curr_sos,
-            "delta":   round(curr_sos - prior_sos, 1) if curr_sos and prior_sos else None,
+        "competitor_avg": {
+            "avg_rank":      {"current": comp_rank_curr},
+            "avg_sos_pct":   {"current": comp_sos_avg},
+            "avg_rating":    {"current": comp_rate_curr},
+            "review_count":  {"current": comp_reviews_curr},
+            "avg_price":     {"current": comp_price_curr},
         },
     }
+
+
+# ── Brand Comparison Table ────────────────────────────────────────────────────
+
+def get_brand_comparison(db: Session, group_id: int, period: str) -> list:
+    """
+    Return per-brand metrics for the comparison table below the stat cards.
+
+    Returns:
+        [
+          {
+            "brand_id":    1,
+            "brand_name":  "Tabasco",
+            "type":        "mine",
+            "avg_rank":    4.2,
+            "sos_pct":     18.5,
+            "avg_price":   10.68,
+            "avg_rating":  4.8,
+            "review_count": 1656,
+            "product_count": 2,
+          },
+          ...
+        ]
+    """
+    start, end  = get_date_range(period)
+    keyword_ids = get_group_keyword_ids(db, group_id)
+
+    group = db.query(TrackingGroup).get(group_id)
+    if not group:
+        return []
+
+    all_total = (
+        db.query(func.sum(ShareOfSearch.total_count))
+        .filter(
+            ShareOfSearch.keyword_id.in_(keyword_ids),
+            ShareOfSearch.date >= start,
+            ShareOfSearch.date <= end,
+        )
+        .scalar() or 0
+    )
+
+    result = []
+    for brand in group.brands:
+        brand_products = [p for p in group.products if p.brand_id == brand.id]
+        prod_ids  = [p.id for p in brand_products]
+        item_ids  = [p.walmart_item_id for p in brand_products]
+
+        # Avg rank
+        rank_val = (
+            db.query(func.avg(SearchResult.position))
+            .filter(
+                SearchResult.keyword_id.in_(keyword_ids),
+                SearchResult.item_id.in_(item_ids),
+                SearchResult.scraped_at >= start,
+                SearchResult.scraped_at <= end,
+            )
+            .scalar()
+        ) if item_ids and keyword_ids else None
+
+        # SOS %
+        sos_total = (
+            db.query(func.sum(ShareOfSearch.total_count))
+            .filter(
+                ShareOfSearch.keyword_id.in_(keyword_ids),
+                ShareOfSearch.brand_id == brand.id,
+                ShareOfSearch.date >= start,
+                ShareOfSearch.date <= end,
+            )
+            .scalar() or 0
+        )
+        sos_pct = round(sos_total / all_total * 100, 1) if all_total else None
+
+        # Avg price
+        price_val = (
+            db.query(func.avg(ProductSnapshot.price))
+            .filter(
+                ProductSnapshot.product_id.in_(prod_ids),
+                ProductSnapshot.scraped_at >= start,
+                ProductSnapshot.scraped_at <= end,
+                ProductSnapshot.price.isnot(None),
+            )
+            .scalar()
+        ) if prod_ids else None
+
+        # Avg rating + latest review count
+        rating_val = (
+            db.query(func.avg(ProductSnapshot.avg_rating))
+            .filter(
+                ProductSnapshot.product_id.in_(prod_ids),
+                ProductSnapshot.scraped_at >= start,
+                ProductSnapshot.scraped_at <= end,
+                ProductSnapshot.avg_rating.isnot(None),
+            )
+            .scalar()
+        ) if prod_ids else None
+
+        review_val = (
+            db.query(func.max(ProductSnapshot.review_count))
+            .filter(
+                ProductSnapshot.product_id.in_(prod_ids),
+                ProductSnapshot.scraped_at <= end,
+                ProductSnapshot.review_count.isnot(None),
+            )
+            .scalar()
+        ) if prod_ids else None
+
+        result.append({
+            "brand_id":      brand.id,
+            "brand_name":    brand.name,
+            "type":          brand.type,
+            "avg_rank":      round(float(rank_val), 1) if rank_val else None,
+            "sos_pct":       sos_pct,
+            "avg_price":     round(float(price_val), 2) if price_val else None,
+            "avg_rating":    round(float(rating_val), 2) if rating_val else None,
+            "review_count":  int(review_val) if review_val else None,
+            "product_count": len(brand_products),
+        })
+
+    # Sort: mine first, then competitors by SOS desc
+    result.sort(key=lambda x: (0 if x["type"] == "mine" else 1, -(x["sos_pct"] or 0)))
+    return result
