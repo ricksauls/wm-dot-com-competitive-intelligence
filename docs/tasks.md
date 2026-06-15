@@ -1,7 +1,5 @@
 ## Next Session
 - [ ] Add tracking groups (schema, migration, models, config UI, scrapers)
-- [ ] Add ability to add multiple brands, products and keywords via a csv file
-- [ ] Lighten up the black background a little (left menu pane) as it is hard to read the blue font on it.
 - [ ] Build analysis layer
 - [ ] Wire dashboard charts (Plotly, WoW/MoM/QoQ/YoY)
 - [ ] Add .gitkeep to static/css/ and static/js/
