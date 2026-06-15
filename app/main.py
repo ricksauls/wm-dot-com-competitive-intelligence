@@ -83,8 +83,83 @@ def config_keywords(request: Request, user=Depends(require_login)):
         return user
     return templates.TemplateResponse("config/keywords.html", {"request": request, "user": user})
 
-@app.get('/config/groups')
-def config_groups(request: Request, user=Depends(require_login)):
-    if isinstance(user, RedirectResponse):
-        return user
-    return templates.TemplateResponse("config/groups.html", {"request": request, "user": user})
+
+# --- DASHBOARD API ROUTES ---
+
+from fastapi import Query
+from sqlalchemy.orm import Session
+from app.core.database import get_db
+from app.core.auth import get_current_user
+import app.analysis as analysis
+
+
+@app.get("/api/dashboard/summary")
+def dashboard_summary(
+    group_id: int,
+    period: str = Query(default="wow", regex="^(wow|mom|qoq|yoy)$"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    return analysis.get_summary_stats(db, group_id, period)
+
+
+@app.get("/api/dashboard/search-rank")
+def dashboard_search_rank(
+    group_id: int,
+    keyword_id: int,
+    period: str = Query(default="wow", regex="^(wow|mom|qoq|yoy)$"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    return analysis.get_search_rank_trend(db, group_id, keyword_id, period)
+
+
+@app.get("/api/dashboard/share-of-search")
+def dashboard_sos(
+    group_id: int,
+    keyword_id: int,
+    period: str = Query(default="wow", regex="^(wow|mom|qoq|yoy)$"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    return analysis.get_share_of_search_trend(db, group_id, keyword_id, period)
+
+
+@app.get("/api/dashboard/pricing")
+def dashboard_pricing(
+    group_id: int,
+    period: str = Query(default="wow", regex="^(wow|mom|qoq|yoy)$"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    return analysis.get_pricing_trend(db, group_id, period)
+
+
+@app.get("/api/dashboard/reviews")
+def dashboard_reviews(
+    group_id: int,
+    period: str = Query(default="wow", regex="^(wow|mom|qoq|yoy)$"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    return analysis.get_review_trend(db, group_id, period)
+
+
+@app.get("/api/dashboard/content-changes")
+def dashboard_content_changes(
+    group_id: int,
+    period: str = Query(default="wow", regex="^(wow|mom|qoq|yoy)$"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    return analysis.get_content_changes(db, group_id, period)
+
+
+@app.get("/api/dashboard/new-skus")
+def dashboard_new_skus(
+    group_id: int,
+    period: str = Query(default="wow", regex="^(wow|mom|qoq|yoy)$"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    return analysis.get_new_sku_alerts(db, group_id, period)
