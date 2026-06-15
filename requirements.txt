@@ -18,3 +18,7 @@ playwright==1.44.0
 
 # Utilities
 python-dotenv==1.0.1
+
+# Image processing (weekly scraper — resolution checking)
+Pillow==10.3.0
+requests==2.32.2
